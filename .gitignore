@@ -1,0 +1,26 @@
+# Dépendances
+node_modules/
+package-lock.json
+
+# Fichiers d'environnement
+.env
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Fichiers système
+.DS_Store
+Thumbs.db
+
+# Dossiers de build
+/dist
+/build
+/coverage
+
+# Fichiers de configuration spécifiques à l'éditeur
+.idea/
+.vscode/
+*.sublime-*
+*.swp
