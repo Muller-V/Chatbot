@@ -1,0 +1,200 @@
+[
+  {
+    "scenario": "Test de sensibilité à la casse",
+    "step": 1,
+    "query": "Bonjour, j'aimerais prendre rendez-vous pour une vidange",
+    "response": "Pour votre vidange, quel jour vous conviendrait ? Nous avons des disponibilités cette semaine et la semaine prochaine."
+  },
+  {
+    "scenario": "Test de sensibilité à la casse",
+    "step": 2,
+    "query": "Je voudrais venir mardi",
+    "response": "Pour votre vidange le mardi, préférez-vous le matin ou l'après-midi ?"
+  },
+  {
+    "scenario": "Test de sensibilité à la casse",
+    "step": 3,
+    "query": "À lyon",
+    "response": "Pour votre vidange le mardi, préférez-vous le matin ou l'après-midi ?"
+  },
+  {
+    "scenario": "Test de sensibilité à la casse",
+    "step": 4,
+    "query": "Oui",
+    "response": "Pour votre vidange le mardi, préférez-vous le matin ou l'après-midi ?"
+  },
+  {
+    "scenario": "Test de sensibilité à la casse",
+    "step": 5,
+    "query": "AB-123-CD",
+    "response": "Pour votre vidange le mardi, préférez-vous le matin ou l'après-midi ?"
+  },
+  {
+    "scenario": "Test de sensibilité à la casse",
+    "step": 6,
+    "query": "Oui c'est bien",
+    "response": "Pour votre vidange le mardi, préférez-vous le matin ou l'après-midi ?"
+  },
+  {
+    "scenario": "Test de correction des données erronées",
+    "step": 1,
+    "query": "Je souhaite faire une vidange",
+    "response": "Pour votre vidange, quel jour vous conviendrait ? Nous avons des disponibilités cette semaine et la semaine prochaine."
+  },
+  {
+    "scenario": "Test de correction des données erronées",
+    "step": 2,
+    "query": "J'ai dit mercredi mais en fait je préfère jeudi",
+    "response": "Pour votre vidange le mercredi, préférez-vous le matin ou l'après-midi ?"
+  },
+  {
+    "scenario": "Test de correction des données erronées",
+    "step": 3,
+    "query": "À Nice",
+    "response": "Pour votre vidange le mercredi, préférez-vous le matin ou l'après-midi ?"
+  },
+  {
+    "scenario": "Test de correction des données erronées",
+    "step": 4,
+    "query": "En fait non je préfère à Lyon",
+    "response": "Pour votre vidange le mercredi, préférez-vous le matin ou l'après-midi ?"
+  },
+  {
+    "scenario": "Test de correction des données erronées",
+    "step": 5,
+    "query": "Oui c'est bon",
+    "response": "Pour votre vidange le mercredi, préférez-vous le matin ou l'après-midi ?"
+  },
+  {
+    "scenario": "Test de correction des données erronées",
+    "step": 6,
+    "query": "XY-789-ZW",
+    "response": "Pour votre vidange le mercredi, préférez-vous le matin ou l'après-midi ?"
+  },
+  {
+    "scenario": "Test de correction des données erronées",
+    "step": 7,
+    "query": "Oui",
+    "response": "Pour votre vidange le mercredi, préférez-vous le matin ou l'après-midi ?"
+  },
+  {
+    "scenario": "Test d'évitement des répétitions en boucle",
+    "step": 1,
+    "query": "J'ai besoin de faire réparer mes freins",
+    "response": "Pour votre réparation des freins, quel jour vous conviendrait ? Nous avons des disponibilités cette semaine et la semaine prochaine."
+  },
+  {
+    "scenario": "Test d'évitement des répétitions en boucle",
+    "step": 2,
+    "query": "Hmm, je ne sais pas trop",
+    "response": "Pour votre réparation des freins, quel jour vous conviendrait ? Nous avons des disponibilités cette semaine et la semaine prochaine."
+  },
+  {
+    "scenario": "Test d'évitement des répétitions en boucle",
+    "step": 3,
+    "query": "Disons vendredi",
+    "response": "Pour votre réparation des freins le vendredi, préférez-vous le matin ou l'après-midi ?"
+  },
+  {
+    "scenario": "Test d'évitement des répétitions en boucle",
+    "step": 4,
+    "query": "Matin",
+    "response": "Dans quel garage souhaitez-vous prendre rendez-vous : Lyon ou Nice ?"
+  },
+  {
+    "scenario": "Test d'évitement des répétitions en boucle",
+    "step": 5,
+    "query": "lyon",
+    "response": "Nous avons un créneau disponible à Lyon le vendredi matin pour réparation des freins. Le prix sera de 362€. Pour finaliser votre rendez-vous, pourriez-vous indiquer votre plaque d'immatriculation au format AA-123-AA ?"
+  },
+  {
+    "scenario": "Test d'évitement des répétitions en boucle",
+    "step": 6,
+    "query": "Oui c'est bon",
+    "response": "Pour finaliser votre rendez-vous, pourriez-vous indiquer votre plaque d'immatriculation au format AA-123-AA ?"
+  },
+  {
+    "scenario": "Test d'évitement des répétitions en boucle",
+    "step": 7,
+    "query": "QR-456-ST",
+    "response": "Merci pour votre plaque d'immatriculation QR-456-ST. Nous recherchons les informations de votre véhicule Renault Clio. Est-ce bien votre véhicule ?"
+  },
+  {
+    "scenario": "Test d'évitement des répétitions en boucle",
+    "step": 8,
+    "query": "Oui",
+    "response": "Nous proposons principalement des services de vidange (494€), changement de pneus (1062€) et contrôle technique (439€). Quel service vous intéresse ?"
+  },
+  {
+    "scenario": "Test de compréhension d'intention",
+    "step": 1,
+    "query": "J'aimerais prendre rendez-vous à Lyon pour le contrôle technique vendredi après-midi",
+    "response": "Parfait ! J'ai bien noté votre demande de rendez-vous pour contrôle technique à Lyon le vendredi après-midi. Le prix sera de 439€. Pour finaliser, pourriez-vous indiquer votre plaque d'immatriculation au format AA-123-AA ?"
+  },
+  {
+    "scenario": "Test de compréhension d'intention",
+    "step": 2,
+    "query": "Oui c'est parfait",
+    "response": "Pour finaliser votre rendez-vous, pourriez-vous indiquer votre plaque d'immatriculation au format AA-123-AA ?"
+  },
+  {
+    "scenario": "Test de compréhension d'intention",
+    "step": 3,
+    "query": "UV-789-WX",
+    "response": "Merci pour votre plaque d'immatriculation UV-789-WX. Nous recherchons les informations de votre véhicule Renault Clio. Est-ce bien votre véhicule ?"
+  },
+  {
+    "scenario": "Test de compréhension d'intention",
+    "step": 4,
+    "query": "C'est ça",
+    "response": "Parfait ! Votre rendez-vous est confirmé pour votre Renault Clio (immatriculation UV-789-WX) au garage de Lyon le vendredi après-midi pour contrôle technique. Le prix sera de 439€. Pouvons-nous vous aider pour autre chose ?"
+  },
+  {
+    "scenario": "Test avec informations partielles puis corrections",
+    "step": 1,
+    "query": "Je dois changer mes pneus",
+    "response": "Pour votre changement de pneus, quel jour vous conviendrait ? Nous avons des disponibilités cette semaine et la semaine prochaine."
+  },
+  {
+    "scenario": "Test avec informations partielles puis corrections",
+    "step": 2,
+    "query": "Euh je pense lundi",
+    "response": "Pour votre changement de pneus le lundi, préférez-vous le matin ou l'après-midi ?"
+  },
+  {
+    "scenario": "Test avec informations partielles puis corrections",
+    "step": 3,
+    "query": "Oh non pardon mardi après-midi",
+    "response": "Dans quel garage souhaitez-vous prendre rendez-vous : Lyon ou Nice ?"
+  },
+  {
+    "scenario": "Test avec informations partielles puis corrections",
+    "step": 4,
+    "query": "Au garage de lyon",
+    "response": "Nous avons un créneau disponible à Lyon le mardi après-midi pour changement de pneus. Le prix sera de 1062€. Pour finaliser votre rendez-vous, pourriez-vous indiquer votre plaque d'immatriculation au format AA-123-AA ?"
+  },
+  {
+    "scenario": "Test avec informations partielles puis corrections",
+    "step": 5,
+    "query": "En fait je préfère à nice",
+    "response": "Pour finaliser votre rendez-vous, pourriez-vous indiquer votre plaque d'immatriculation au format AA-123-AA ?"
+  },
+  {
+    "scenario": "Test avec informations partielles puis corrections",
+    "step": 6,
+    "query": "Oui",
+    "response": "Pour finaliser votre rendez-vous, pourriez-vous indiquer votre plaque d'immatriculation au format AA-123-AA ?"
+  },
+  {
+    "scenario": "Test avec informations partielles puis corrections",
+    "step": 7,
+    "query": "YZ-123-XW",
+    "response": "Merci pour votre plaque d'immatriculation YZ-123-XW. Nous recherchons les informations de votre véhicule Renault Clio. Est-ce bien votre véhicule ?"
+  },
+  {
+    "scenario": "Test avec informations partielles puis corrections",
+    "step": 8,
+    "query": "Oui c'est ça",
+    "response": "Parfait ! Votre rendez-vous est confirmé pour votre Renault Clio (immatriculation YZ-123-XW) au garage de Nice le mardi après-midi pour changement de pneus. Le prix sera de 1062€. Pouvons-nous vous aider pour autre chose ?"
+  }
+]

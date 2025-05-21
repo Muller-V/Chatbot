@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auto Service Pro - Chatbot</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+        }
+        .chat-container {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            margin-bottom: 20px;
+            height: 450px;
+            display: flex;
+            flex-direction: column;
+        }
+        .chat-messages {
+            padding: 20px;
+            flex-grow: 1;
+            overflow-y: auto;
+        }
+        .message {
+            margin-bottom: 15px;
+            padding: 10px 15px;
+            border-radius: 20px;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+        .bot-message {
+            background-color: #f1f0f0;
+            margin-right: auto;
+        }
+        .user-message {
+            background-color: #3498db;
+            color: white;
+            margin-left: auto;
+        }
+        .chat-input {
+            display: flex;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-top: 1px solid #eee;
+        }
+        .chat-input input {
+            flex-grow: 1;
+            padding: 10px 15px;
+            border: 1px solid #ddd;
+            border-radius: 20px;
+            outline: none;
+        }
+        .chat-input button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            padding: 10px 20px;
+            margin-left: 10px;
+            cursor: pointer;
+        }
+        .chat-input button:hover {
+            background-color: #2980b9;
+        }
+        .quick-replies {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            padding: 10px 15px;
+            background-color: #f9f9f9;
+        }
+        .quick-reply {
+            background-color: #e9ecef;
+            border: 1px solid #ced4da;
+            border-radius: 15px;
+            padding: 8px 12px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .quick-reply:hover {
+            background-color: #d1d7dc;
+        }
+        .reset-button {
+            display: block;
+            margin: 0 auto;
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 10px 15px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .reset-button:hover {
+            background-color: #5a6268;
+        }
+        .loader {
+            display: none;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            margin: 0 auto;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .loading .loader {
+            display: inline-block;
+        }
+        .typing-indicator {
+            display: inline-flex;
+            align-items: center;
+            margin-left: 5px;
+        }
+        .typing-indicator span {
+            height: 8px;
+            width: 8px;
+            margin: 0 1px;
+            background-color: #3498db;
+            border-radius: 50%;
+            display: inline-block;
+            animation: blink 1.4s infinite both;
+        }
+        .typing-indicator span:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+        .typing-indicator span:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+        @keyframes blink {
+            0% { opacity: 0.1; }
+            20% { opacity: 1; }
+            100% { opacity: 0.1; }
+        }
+        .loading-message {
+            display: flex;
+            align-items: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔧 Auto Service Pro - Chatbot</h1>
+    <div class="chat-container">
+        <div id="chat-messages" class="chat-messages">
+            <div class="message bot-message">Bonjour ! Comment puis-je vous aider avec votre véhicule aujourd'hui ?</div>
+        </div>
+        <div id="quick-replies" class="quick-replies">
+            <div class="quick-reply" onclick="sendMessage('Je voudrais faire une vidange')">Vidange</div>
+            <div class="quick-reply" onclick="sendMessage('Changement de pneus')">Pneus</div>
+            <div class="quick-reply" onclick="sendMessage('Contrôle technique')">Contrôle technique</div>
+            <div class="quick-reply" onclick="sendMessage('Quels sont vos services ?')">Services</div>
+        </div>
+        <div class="chat-input">
+            <input type="text" id="user-input" placeholder="Tapez votre message ici...">
+            <button id="send-button" onclick="sendMessage()">Envoyer</button>
+        </div>
+    </div>
+    <button class="reset-button" onclick="resetConversation()">Nouvelle conversation</button>
+
+    <script>
+        // Suggestions rapides pour chaque étape de la conversation
+        const quickReplySuggestions = {
+            'services': [
+                'Vidange', 'Pneus', 'Contrôle technique', 'Freins', 'Climatisation'
+            ],
+            'jour': [
+                'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Semaine prochaine'
+            ],
+            'horaire': [
+                'Le matin', 'L\'après-midi', '10h', '14h', '16h'
+            ],
+            'garage': [
+                'Lyon', 'Nice'
+            ],
+            'confirmation': [
+                'Oui', 'Non', 'Je confirme'
+            ],
+            'plaque': [
+                'AB-123-CD', 'XX-000-YY'
+            ]
+        };
+
+        // Fonction pour ajouter un message au chat
+        function addMessage(message, isUser = false, isLoading = false) {
+            const chatMessages = document.getElementById('chat-messages');
+            const messageElement = document.createElement('div');
+            messageElement.classList.add('message');
+            messageElement.classList.add(isUser ? 'user-message' : 'bot-message');
+            
+            if (isLoading) {
+                messageElement.classList.add('loading-message');
+                messageElement.innerHTML = `${message} <div class="typing-indicator"><span></span><span></span><span></span></div>`;
+            } else {
+                messageElement.textContent = message;
+            }
+            
+            chatMessages.appendChild(messageElement);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            return messageElement;
+        }
+
+        // Fonction pour déterminer les suggestions basées sur la réponse du bot
+        function getSuggestionsForResponse(botResponse) {
+            const lowercaseResponse = botResponse.toLowerCase();
+            
+            if (lowercaseResponse.includes('services') || 
+                lowercaseResponse.includes('propose') || 
+                lowercaseResponse.includes('disponible')) {
+                return quickReplySuggestions.services;
+            } 
+            else if ((lowercaseResponse.includes('quel jour') || 
+                     lowercaseResponse.includes('quelle date') || 
+                     lowercaseResponse.includes('quand') ||
+                     lowercaseResponse.includes('semaine')) && 
+                     !lowercaseResponse.includes('confirmé')) {
+                return quickReplySuggestions.jour;
+            } 
+            else if (lowercaseResponse.includes('heure') || 
+                     lowercaseResponse.includes('horaire') || 
+                     lowercaseResponse.includes('matin') || 
+                     lowercaseResponse.includes('après-midi')) {
+                return quickReplySuggestions.horaire;
+            } 
+            else if (lowercaseResponse.includes('garage') || 
+                     lowercaseResponse.includes('ville') || 
+                     lowercaseResponse.includes('lyon') || 
+                     lowercaseResponse.includes('nice')) {
+                return quickReplySuggestions.garage;
+            } 
+            else if (lowercaseResponse.includes('plaque') || 
+                     lowercaseResponse.includes('immatriculation')) {
+                return quickReplySuggestions.plaque;
+            }
+            else if (lowercaseResponse.includes('confirm') || 
+                     lowercaseResponse.includes('récapitulatif') || 
+                     lowercaseResponse.includes('validez')) {
+                return quickReplySuggestions.confirmation;
+            }
+            
+            // Si aucune correspondance, retourner les suggestions de services par défaut
+            return quickReplySuggestions.services;
+        }
+
+        // Fonction pour mettre à jour les suggestions rapides
+        function updateQuickReplies(botResponse) {
+            const quickRepliesContainer = document.getElementById('quick-replies');
+            quickRepliesContainer.innerHTML = '';
+            
+            const suggestions = getSuggestionsForResponse(botResponse);
+            
+            for (const suggestion of suggestions) {
+                const quickReply = document.createElement('div');
+                quickReply.classList.add('quick-reply');
+                quickReply.textContent = suggestion;
+                quickReply.addEventListener('click', function() {
+                    sendMessage(suggestion);
+                });
+                quickRepliesContainer.appendChild(quickReply);
+            }
+        }
+
+        // Fonction pour envoyer un message au chatbot
+        function sendMessage(messageText = null) {
+            const userInput = document.getElementById('user-input');
+            const sendButton = document.getElementById('send-button');
+            const message = messageText || userInput.value.trim();
+            
+            if (!message) return;
+            
+            // Désactiver le bouton pendant l'envoi
+            sendButton.disabled = true;
+            sendButton.classList.add('loading');
+            sendButton.innerHTML = '<div class="loader"></div>';
+            
+            // Afficher le message de l'utilisateur
+            addMessage(message, true);
+            userInput.value = '';
+            
+            // Envoyer la requête au chatbot
+            fetch('/api/chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ message })
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Réactiver le bouton
+                sendButton.disabled = false;
+                sendButton.classList.remove('loading');
+                sendButton.innerHTML = 'Envoyer';
+                
+                if (data.success && data.botResponse) {
+                    let loadingMessage = null;
+                    
+                    // Si la réponse contient isLoading=true, afficher un message de chargement
+                    if (data.isLoading) {
+                        loadingMessage = addMessage(data.botResponse, false, true);
+                        
+                        // Faire une nouvelle requête après 1,5 secondes
+                        setTimeout(() => {
+                            fetch('/api/chat', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({ message: "continuation" })
+                            })
+                            .then(response => response.json())
+                            .then(followupData => {
+                                // Supprimer le message de chargement
+                                if (loadingMessage) {
+                                    chatMessages.removeChild(loadingMessage);
+                                }
+                                
+                                if (followupData.success && followupData.botResponse) {
+                                    // Afficher la réponse du chatbot
+                                    addMessage(followupData.botResponse);
+                                    // Mettre à jour les suggestions rapides
+                                    updateQuickReplies(followupData.botResponse);
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Erreur lors de la continuation:', error);
+                                if (loadingMessage) {
+                                    chatMessages.removeChild(loadingMessage);
+                                }
+                                addMessage('Désolé, une erreur est survenue lors de la récupération des données.');
+                            });
+                        }, 1500);
+                    } else {
+                        // Afficher la réponse du chatbot normalement
+                        addMessage(data.botResponse);
+                        // Mettre à jour les suggestions rapides
+                        updateQuickReplies(data.botResponse);
+                    }
+                } else {
+                    addMessage('Désolé, une erreur est survenue. Veuillez réessayer.');
+                }
+            })
+            .catch(error => {
+                console.error('Erreur:', error);
+                addMessage('Désolé, une erreur de connexion est survenue. Veuillez réessayer.');
+                
+                // Réactiver le bouton
+                sendButton.disabled = false;
+                sendButton.classList.remove('loading');
+                sendButton.innerHTML = 'Envoyer';
+            });
+        }
+
+        // Fonction pour réinitialiser la conversation
+        function resetConversation() {
+            const resetButton = document.querySelector('.reset-button');
+            resetButton.disabled = true;
+            resetButton.textContent = 'Réinitialisation...';
+            
+            fetch('/api/reset', {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                resetButton.disabled = false;
+                resetButton.textContent = 'Nouvelle conversation';
+                
+                if (data.success) {
+                    // Effacer tous les messages existants
+                    document.getElementById('chat-messages').innerHTML = '';
+                    // Afficher le message d'accueil
+                    addMessage(data.botResponse);
+                    
+                    // Réinitialiser les suggestions rapides
+                    const initialSuggestions = ['Vidange', 'Pneus', 'Contrôle technique', 'Services'];
+                    const quickRepliesContainer = document.getElementById('quick-replies');
+                    quickRepliesContainer.innerHTML = '';
+                    
+                    for (const suggestion of initialSuggestions) {
+                        const quickReply = document.createElement('div');
+                        quickReply.classList.add('quick-reply');
+                        quickReply.textContent = suggestion;
+                        quickReply.addEventListener('click', function() {
+                            sendMessage(suggestion);
+                        });
+                        quickRepliesContainer.appendChild(quickReply);
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Erreur lors de la réinitialisation:', error);
+                resetButton.disabled = false;
+                resetButton.textContent = 'Nouvelle conversation';
+                addMessage('Désolé, une erreur est survenue lors de la réinitialisation.');
+            });
+        }
+
+        // Permettre l'envoi de message avec la touche "Entrée"
+        document.getElementById('user-input').addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        });
+        
+        // Focus sur l'input au chargement
+        document.getElementById('user-input').focus();
+    </script>
+</body>
+</html> 

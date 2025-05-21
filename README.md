@@ -1,76 +1,142 @@
-# Garage Automobile AI Chatbot
+# Chatbot IA pour Garage Automobile
 
-Ce projet est un POC (Proof of Concept) d'un chatbot IA agent pour un garage automobile. Il permet de dialoguer naturellement avec les utilisateurs et d'effectuer des actions via API comme proposer des services, des créneaux horaires et réserver des rendez-vous.
+Un chatbot simplifié pour la prise de rendez-vous dans un garage automobile. Ce projet utilise une architecture modulaire avec LangChain et Ollama.
 
 ## Architecture
 
-- **Backend Node.js**: Orchestrateur d'agent IA avec Express
-- **LLM local**: Utilisation d'Ollama (modèle Mistral)
-- **LangChain.js**: Framework pour créer l'agent intelligent
-- **Backend Symfony**: API REST existante (non incluse dans ce repo)
+Le projet est organisé de manière modulaire :
 
-## Prérequis
+- `server.js` : Point d'entrée principal, serveur Express
+- `src/` : Répertoire principal du code source
+  - `agents/` : Agents de conversation
+  - `config/` : Configuration et constantes
+  - `llm/` : Configuration des modèles LLM
+  - `models/` : Modèles de données
+  - `services/` : Services (API, etc.)
+  - `utils/` : Utilitaires (formatage, parsing)
+  - `index.js` : Point d'entrée du chatbot
 
-- Node.js v16+
-- Ollama installé localement (https://ollama.ai/)
-- Modèle Mistral ou LLaMA3 chargé dans Ollama
+## Fonctionnalités
+
+- Conversation en langage naturel
+- Détection des intentions utilisateur (service, date, heure, etc.)
+- Gestion des plaque d'immatriculation
+- Confirmation de rendez-vous
+- API pour intégration web
 
 ## Installation
 
-1. Cloner le projet
-2. Installer les dépendances
+1. Cloner le dépôt
+2. Installer les dépendances :
+   ```
+   npm install
+   ```
+3. Lancer le serveur :
+   ```
+   npm start
+   ```
+
+## API
+
+- `POST /api/chat` : Envoyer un message au chatbot
+  ```json
+  {
+    "message": "Je voudrais prendre rendez-vous pour une vidange mardi prochain à Lyon"
+  }
+  ```
+
+- `POST /api/reset` : Réinitialiser la conversation
+
+## Technologies utilisées
+
+- Node.js
+- Express
+- LangChain
+- Ollama (modèle Mistral)
+
+## Prérequis
+
+- Node.js v14+
+- Accès à une installation Docker (optionnel, pour tests BDD)
+- API Backend Symfony (optionnel, le chatbot fonctionne en mode dégradé sans API)
+
+## Configuration
+
+1. Créer un fichier `.env` basé sur `.env.example`
+2. Configurer l'URL de l'API et autres paramètres
+
+## Utilisation
+
+### Démarrer le serveur
 
 ```bash
-npm install
+node server.js
 ```
 
-3. Créer un fichier `.env` basé sur `.env.example`
-4. Démarrer Ollama en local
+Le serveur sera disponible à l'adresse http://localhost:3000.
+
+### Tester les conversations
+
+Pour exécuter les tests de conversation:
 
 ```bash
-ollama serve
+node test-simple.js
 ```
 
-5. Vérifier que le modèle Mistral est disponible ou le télécharger
+Pour des tests plus complets:
 
 ```bash
-ollama pull mistral
+node test-conversation-avancee.js
 ```
 
-## Démarrage
+Pour des tests avec vérification en base de données:
 
 ```bash
-npm run dev
+node test-complet.js
 ```
 
-Le serveur démarrera sur http://localhost:3000
+## Architecture
 
-## Endpoints API
+### Composants principaux
 
-- `GET /health`: Vérification de l'état du service
-- `POST /chat`: Endpoint principal pour interagir avec le chatbot
-  - Body: `{ "message": "Votre message ici" }`
-  - Response: `{ "success": true, "botResponse": "Réponse du chatbot" }`
+- **orchestrator.js**: Orchestrateur principal du chatbot, gère le flux de conversation
+- **model.js**: Configuration du modèle LLM (Mistral)
+- **server.js**: Serveur Express exposant l'API du chatbot
+- **test-*.js**: Scripts de test pour valider différents aspects du chatbot
 
-## Structure du projet
+### Mode de fonctionnement
 
-- `index.js`: Point d'entrée, serveur Express
-- `orchestrator.js`: Configuration de l'agent LangChain
-- `tools/garage.js`: Tools/fonctions pour l'agent
-- `llm/model.js`: Wrapper pour Ollama
+Le chatbot utilise une approche hybride:
+1. Il tente d'abord d'utiliser l'API backend pour récupérer/enregistrer des données
+2. Si l'API n'est pas disponible, il utilise un mode dégradé avec des données par défaut
+3. Pour les environnements de développement avec Docker, il peut interagir directement avec la base de données
 
-## Exemple d'utilisation
+## Intégration avec MySQL via Docker
 
-Avec cURL:
+Si Docker est disponible, le chatbot peut interagir directement avec la base de données MySQL:
 
 ```bash
-curl -X POST http://localhost:3000/chat \
-  -H "Content-Type: application/json" \
-  -d '{"message":"Je voudrais faire une révision pour ma voiture"}'
+# Vérifier les rendez-vous existants
+docker exec -it mysql_database mysql -u user -puserpassword myapp -e "SELECT * FROM appointment;"
+
+# Vérifier les véhicules existants
+docker exec -it mysql_database mysql -u user -puserpassword myapp -e "SELECT * FROM vehicule;"
 ```
 
-## Notes pour le développement
+## Dépannage
 
-- Pour le POC, des données simulées sont utilisées si l'API Symfony n'est pas disponible
-- L'agent est configuré pour être autonome et utiliser les tools appropriés selon le contexte
-- La mémoire de conversation est gérée par LangChain pour maintenir le contexte 
+### Problèmes courants
+
+- **API Backend inaccessible**: Le chatbot continuera de fonctionner en mode dégradé
+- **Erreurs de base de données**: Vérifier les logs pour identifier les problèmes d'insertion
+- **Erreurs de format**: Les plaques d'immatriculation doivent être au format XX-XXX-XX
+
+## Documentation supplémentaire
+
+Voir le fichier `AMELIORATIONS.md` pour les dernières améliorations apportées au projet.
+
+## Maintenance
+
+### Ajout de nouveaux services
+
+Pour ajouter de nouveaux services au garage, modifier la fonction `getPriceForService` dans `orchestrator.js`. 

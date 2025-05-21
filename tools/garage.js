@@ -1,303 +1,352 @@
 const axios = require("axios");
-const { DynamicTool } = require("langchain/tools");
+const { DynamicTool, Tool } = require("langchain/tools");
 const dotenv = require("dotenv");
+const garageData = require("../data/garages");
+const operationsData = require("../data/operations");
 
 dotenv.config();
 
-const API_URL = process.env.SYMFONY_API_URL || "http://localhost:8000/api";
+const API_URL = process.env.SYMFONY_API_URL || "http://localhost:8000";
 
 /**
  * Récupère la liste des services disponibles au garage
  */
-const listServicesTools = new DynamicTool({
-  name: "listServices",
-  description: "Obtient la liste des services proposés par le garage (révision, vidange, diagnostic, etc.)",
-  func: async () => {
+class ListServicesTools extends Tool {
+  name = "listServices";
+
+  description = "Permet d'obtenir la liste des services proposés par le garage";
+
+  async _call(arg) {
     try {
-      // En situation réelle, ceci appellerait l'API Symfony
-      const response = await axios.get(`${API_URL}/services`);
-      return JSON.stringify(response.data);
-    } catch (error) {
-      // Pour le POC, retournons des données simulées en cas d'erreur
-      return JSON.stringify([
-        { 
-          id: 1, 
-          name: "Révision standard", 
-          price: 120, 
-          duration: 60,
-          description: "Contrôle complet du véhicule: niveaux, filtres, freins, suspensions, pneus, éclairage et essai routier.",
-          recommendation: "Recommandé tous les 15 000 km ou une fois par an."
-        },
-        { 
-          id: 2, 
-          name: "Vidange moteur", 
-          price: 80, 
-          duration: 45,
-          description: "Remplacement de l'huile moteur et du filtre à huile avec produits de qualité supérieure.",
-          recommendation: "Recommandé tous les 10 000 km ou une fois par an selon le type de véhicule."
-        },
-        { 
-          id: 3, 
-          name: "Diagnostic électronique", 
-          price: 60, 
-          duration: 30,
-          description: "Analyse complète des systèmes électroniques du véhicule pour identifier les anomalies.",
-          recommendation: "Recommandé en cas de voyant allumé ou de dysfonctionnement."
-        },
-        { 
-          id: 4, 
-          name: "Changement de pneus", 
-          price: 200, 
-          duration: 60,
-          description: "Remplacement des pneus, équilibrage et vérification de la géométrie.",
-          recommendation: "Recommandé lorsque la profondeur des sculptures est inférieure à 3mm."
-        },
-        { 
-          id: 5, 
-          name: "Réparation freins", 
-          price: 150, 
-          duration: 90,
-          description: "Remplacement des plaquettes et/ou disques de frein selon l'état, purge du liquide si nécessaire.",
-          recommendation: "Recommandé en cas de bruit au freinage ou de performance réduite."
-        },
-        {
-          id: 6,
-          name: "Contrôle climatisation",
-          price: 70,
-          duration: 40,
-          description: "Vérification et recharge du système de climatisation, contrôle d'étanchéité.",
-          recommendation: "Recommandé tous les 2 ans ou en cas de performance réduite."
-        },
-        {
-          id: 7,
-          name: "Remplacement batterie",
-          price: 110,
-          duration: 30,
-          description: "Remplacement de la batterie par un modèle adapté au véhicule avec vérification du système de charge.",
-          recommendation: "Recommandé tous les 4-5 ans ou en cas de difficulté au démarrage."
+      const args = arg ? JSON.parse(arg) : {};
+      const category = args.category || null;
+      
+      // Essayer de récupérer depuis l'API backend
+      try {
+        if (category) {
+          const response = await axios.get(`${API_URL}/operations/${category}`);
+          if (response.data && Array.isArray(response.data)) {
+            const formattedServices = response.data.map(service => ({
+              nom: service.name,
+              categorie: service.category ? service.category.name : 'Non catégorisé',
+              prix: service.price ? `${service.price} €` : "Prix sur demande",
+              duree: service.duration ? `${service.duration} minutes` : "Durée variable"
+            }));
+            
+            return JSON.stringify({
+              services: formattedServices
+            }, null, 2);
+          }
+        } else {
+          const response = await axios.get(`${API_URL}/operations`);
+          if (response.data && Array.isArray(response.data)) {
+            const formattedServices = response.data.map(service => ({
+              nom: service.name,
+              categorie: service.category ? service.category.name : 'Non catégorisé',
+              prix: service.price ? `${service.price} €` : "Prix sur demande",
+              duree: service.duration ? `${service.duration} minutes` : "Durée variable"
+            }));
+            
+            return JSON.stringify({
+              services: formattedServices
+            }, null, 2);
+          }
         }
-      ]);
+      } catch (apiError) {
+        console.log("API non disponible, utilisation des données locales", apiError.message);
+      }
+      
+      // Fallback vers les données locales si l'API échoue
+      let services;
+      if (category) {
+        services = operationsData.findOperationsByCategory(category);
+      } else {
+        services = operationsData.getAllOperations();
+      }
+      
+      // Formatage pour meilleure lisibilité
+      const formattedServices = services.map(service => ({
+        nom: service.name,
+        categorie: service.category,
+        prix: service.price ? `${service.price} €` : "Prix sur demande",
+        duree: service.time_unit ? `${service.time_unit} unités` : "Durée variable"
+      }));
+      
+      return JSON.stringify({
+        services: formattedServices,
+        categories: operationsData.getAllCategories()
+      }, null, 2);
+    } catch (error) {
+      console.error("Erreur ListServicesTools:", error);
+      return `Erreur lors de la récupération des services: ${error.message}`;
     }
-  },
-});
+  }
+}
 
 /**
  * Récupère les créneaux disponibles pour un service donné
  */
-const getAvailableSlotsTools = new DynamicTool({
-  name: "getAvailableSlots",
-  description: "Obtient les créneaux horaires disponibles pour un service donné. Requiert un objet JSON avec serviceId (obligatoire) et date (optionnel, format YYYY-MM-DD)",
-  func: async (input) => {
+class GetAvailableSlotsTools extends Tool {
+  name = "getAvailableSlots";
+
+  description = "Permet de trouver les créneaux disponibles pour un service donné";
+
+  async _call(arg) {
     try {
-      // Parsing des paramètres (serviceId, date)
-      const params = JSON.parse(input);
+      const args = arg ? JSON.parse(arg) : {};
+      const { service, location, date } = args;
       
-      if (!params.serviceId) {
-        return JSON.stringify({
-          error: "Le paramètre serviceId est requis pour rechercher des créneaux disponibles."
-        });
-      }
-      
-      // En situation réelle, ceci appellerait l'API Symfony
-      const response = await axios.get(`${API_URL}/slots`, { params });
-      return JSON.stringify(response.data);
-    } catch (error) {
-      // Pour le POC, retournons des données simulées
-      // Générer des créneaux pour les 3 prochains jours
-      const slots = [];
-      const today = new Date();
-      
-      // Service demandé
-      const serviceId = parseInt(JSON.parse(input).serviceId);
-      
-      // Noms des services pour les messages de confirmation
-      const serviceNames = {
-        1: "Révision standard",
-        2: "Vidange moteur",
-        3: "Diagnostic électronique",
-        4: "Changement de pneus",
-        5: "Réparation freins",
-        6: "Contrôle climatisation",
-        7: "Remplacement batterie"
-      };
-      
-      const serviceName = serviceNames[serviceId] || "Service demandé";
-      
-      // Récupérer la date demandée si fournie
-      let startDate = today;
+      // Essayer de récupérer depuis l'API backend
       try {
-        const parsedInput = JSON.parse(input);
-        if (parsedInput.date) {
-          startDate = new Date(parsedInput.date);
-          if (isNaN(startDate.getTime())) {
-            startDate = today;
+        const response = await axios.get(`${API_URL}/appointments/avaibilities`, {
+          params: {
+            service: service,
+            location: location,
+            date: date
           }
+        });
+        
+        if (response.data && response.data.availabilities) {
+          return JSON.stringify(response.data, null, 2);
         }
-      } catch (e) {
-        // Ignorer les erreurs et utiliser la date du jour
+      } catch (apiError) {
+        console.log("API de disponibilités non disponible, utilisation des données locales", apiError.message);
       }
       
-      for (let i = 1; i <= 5; i++) {
-        const date = new Date(startDate);
-        date.setDate(startDate.getDate() + i);
-        
-        // Sauter les dimanches
-        if (date.getDay() === 0) continue;
-        
-        const dateStr = date.toISOString().split('T')[0];
-        const readableDate = new Intl.DateTimeFormat('fr-FR', { 
-          weekday: 'long', 
-          day: 'numeric', 
-          month: 'long'
-        }).format(date);
-        
-        // Ajouter plusieurs créneaux pour chaque jour
-        if (date.getDay() !== 6) { // Pas le samedi
-          slots.push({ 
-            id: i*100+1, 
-            date: dateStr, 
-            time: "09:00", 
-            available: true,
-            readableDate: readableDate,
-            service: serviceName
-          });
-          slots.push({ 
-            id: i*100+2, 
-            date: dateStr, 
-            time: "11:00", 
-            available: true,
-            readableDate: readableDate,
-            service: serviceName
-          });
-          slots.push({ 
-            id: i*100+3, 
-            date: dateStr, 
-            time: "14:00", 
-            available: true,
-            readableDate: readableDate,
-            service: serviceName
-          });
-          slots.push({ 
-            id: i*100+4, 
-            date: dateStr, 
-            time: "16:00", 
-            available: true,
-            readableDate: readableDate,
-            service: serviceName
-          });
-        } else { // Samedi: seulement le matin
-          slots.push({ 
-            id: i*100+5, 
-            date: dateStr, 
-            time: "09:30", 
-            available: true,
-            readableDate: readableDate,
-            service: serviceName
-          });
-          slots.push({ 
-            id: i*100+6, 
-            date: dateStr, 
-            time: "11:30", 
-            available: true,
-            readableDate: readableDate,
-            service: serviceName
-          });
-        }
+      // Fallback: Recherche des garages à proximité de l'emplacement demandé
+      let nearbyGarages = [];
+      if (location) {
+        nearbyGarages = garageData.findGaragesByLocation(location);
+      } else {
+        nearbyGarages = garageData.getAllGarages().slice(0, 5);
       }
+      
+      // Génération de créneaux fictifs pour la démonstration
+      const slots = generateFakeSlots(date || new Date(), nearbyGarages);
       
       return JSON.stringify({
-        slots: slots,
-        message: `Voici les créneaux disponibles pour ${serviceName} dans les prochains jours.`
-      });
+        service,
+        location,
+        garages: nearbyGarages.map(g => g.name),
+        slots
+      }, null, 2);
+    } catch (error) {
+      console.error("Erreur GetAvailableSlotsTools:", error);
+      return `Erreur lors de la recherche des créneaux disponibles: ${error.message}`;
     }
-  },
-});
+  }
+}
 
 /**
  * Réserve un créneau horaire
  */
-const bookSlotTools = new DynamicTool({
-  name: "bookSlot",
-  description: "Réserve un créneau horaire pour un service. Requiert un objet JSON avec slotId, serviceId, customerName, vehicleInfo (marque, modèle, année), et optionnellement customerPhone et comments",
-  func: async (input) => {
+class BookSlotTools extends Tool {
+  name = "bookSlot";
+
+  description = "Permet de réserver un créneau horaire";
+
+  async _call(arg) {
     try {
-      // Parsing des paramètres (slotId, serviceId, customerName, vehicleInfo)
-      const bookingData = JSON.parse(input);
+      const args = arg ? JSON.parse(arg) : {};
+      const { service, garage, datetime, clientName, clientPhone, vehicleInfo, licensePlate } = args;
       
-      // Vérifier que tous les champs requis sont présents
-      if (!bookingData.slotId || !bookingData.serviceId || 
-          !bookingData.customerName || !bookingData.vehicleInfo) {
-        return JSON.stringify({ 
-          success: false, 
-          error: "Informations manquantes. Veuillez fournir slotId, serviceId, customerName et vehicleInfo" 
-        });
+      // Vérifications basiques
+      if (!service || !garage || !datetime) {
+        return JSON.stringify({
+          success: false,
+          message: "Informations incomplètes. Veuillez fournir le service, le garage et la date/heure souhaités."
+        }, null, 2);
       }
       
-      // En situation réelle, ceci appellerait l'API Symfony
-      const response = await axios.post(`${API_URL}/bookings`, bookingData);
-      return JSON.stringify(response.data);
+      // Essayer d'envoyer la réservation à l'API
+      try {
+        const appointmentData = {
+          service_id: typeof service === 'string' ? service : service.id,
+          garage_id: typeof garage === 'string' ? garage : garage.id,
+          datetime: datetime,
+          client_name: clientName || "Client",
+          client_phone: clientPhone || "",
+          license_plate: licensePlate || "",
+          vehicle_info: vehicleInfo || {}
+        };
+        
+        const response = await axios.post(`${API_URL}/appointments`, appointmentData);
+        
+        if (response.data) {
+          return JSON.stringify({
+            success: true,
+            message: "Réservation confirmée",
+            details: response.data
+          }, null, 2);
+        }
+      } catch (apiError) {
+        console.log("API de réservation non disponible, simulation de réservation", apiError.message);
+      }
+      
+      // Simulation d'une réservation réussie (fallback)
+      return JSON.stringify({
+        success: true,
+        message: "Réservation confirmée",
+        details: {
+          service,
+          garage,
+          datetime,
+          client: {
+            name: clientName || "Client",
+            phone: clientPhone || "Non spécifié"
+          },
+          vehicle: {
+            info: vehicleInfo || "Non spécifié",
+            license_plate: licensePlate || "Non spécifié"
+          },
+          reference: "RES-" + Math.floor(Math.random() * 10000)
+        }
+      }, null, 2);
     } catch (error) {
-      // Pour le POC, simulons une réservation réussie
-      const slotId = parseInt(JSON.parse(input).slotId || 0);
-      const serviceId = parseInt(JSON.parse(input).serviceId || 0);
-      const customerName = JSON.parse(input).customerName || "le client";
-      const vehicleInfo = JSON.parse(input).vehicleInfo || {};
-      
-      // Générer une "vraie" réservation
-      // Récupérer les données du créneau en fonction du slotId
-      const day = Math.floor(slotId / 100);
-      const today = new Date();
-      const date = new Date(today);
-      date.setDate(today.getDate() + day);
-      const dateStr = date.toISOString().split('T')[0];
-      
-      // Déterminer l'heure en fonction du modulo
-      const timeMapping = {
-        1: "09:00", 2: "11:00", 3: "14:00", 4: "16:00", 5: "09:30", 6: "11:30"
-      };
-      const time = timeMapping[slotId % 100] || "10:00";
-      
-      // Noms des services
-      const serviceNames = {
-        1: "Révision standard",
-        2: "Vidange moteur",
-        3: "Diagnostic électronique",
-        4: "Changement de pneus",
-        5: "Réparation freins",
-        6: "Contrôle climatisation",
-        7: "Remplacement batterie"
-      };
-      
-      const serviceName = serviceNames[serviceId] || "Service demandé";
-      const readableDate = new Intl.DateTimeFormat('fr-FR', { 
-        weekday: 'long', 
-        day: 'numeric', 
-        month: 'long', 
-        year: 'numeric'
-      }).format(date);
-      
-      const vehicleDesc = typeof vehicleInfo === 'string' 
-        ? vehicleInfo 
-        : `${vehicleInfo.marque || ''} ${vehicleInfo.modele || ''} ${vehicleInfo.annee || ''}`;
-      
-      return JSON.stringify({ 
-        success: true, 
-        bookingId: Math.floor(Math.random() * 10000) + 1000,
-        service: serviceName,
-        date: dateStr,
-        time: time,
-        readableDate: readableDate,
-        customerName: customerName,
-        vehicleInfo: vehicleDesc,
-        message: `Réservation confirmée pour ${customerName} le ${readableDate} à ${time} pour ${serviceName.toLowerCase()}.`,
-        additionalInfo: "Veuillez vous présenter 10 minutes avant l'heure de votre rendez-vous. N'oubliez pas d'apporter votre carte grise."
-      });
+      console.error("Erreur BookSlotTools:", error);
+      return `Erreur lors de la réservation: ${error.message}`;
     }
-  },
-});
+  }
+}
+
+/**
+ * Récupère les informations sur un véhicule à partir de sa plaque d'immatriculation
+ */
+class GetVehicleInfoTools extends Tool {
+  name = "getVehicleInfo";
+
+  description = "Permet d'obtenir les informations sur un véhicule à partir de sa plaque d'immatriculation";
+
+  async _call(arg) {
+    try {
+      const args = arg ? JSON.parse(arg) : {};
+      const { licensePlate } = args;
+      
+      if (!licensePlate) {
+        return JSON.stringify({
+          success: false,
+          message: "Veuillez fournir une plaque d'immatriculation"
+        }, null, 2);
+      }
+      
+      // Vérifier le format de la plaque
+      const licenseRegex = /^[A-Z]{2}-\d{3}-[A-Z]{2}$/;
+      if (!licenseRegex.test(licensePlate)) {
+        return JSON.stringify({
+          success: false,
+          message: "Format de plaque invalide. Le format attendu est AA-123-AA"
+        }, null, 2);
+      }
+      
+      // Essayer de récupérer les informations du véhicule via l'API
+      try {
+        const response = await axios.get(`${API_URL}/vehicules/${licensePlate}`);
+        
+        if (response.data) {
+          return JSON.stringify({
+            success: true,
+            vehicle: response.data
+          }, null, 2);
+        }
+      } catch (apiError) {
+        console.log("API véhicules non disponible, simulation de données", apiError.message);
+      }
+      
+      // Données simulées (fallback)
+      return JSON.stringify({
+        success: true,
+        vehicle: {
+          license_plate: licensePlate,
+          brand: "Renault",
+          model: "Clio",
+          year: "2020",
+          fuel_type: "Essence",
+          mileage: "25000 km"
+        }
+      }, null, 2);
+    } catch (error) {
+      console.error("Erreur GetVehicleInfoTools:", error);
+      return `Erreur lors de la récupération des informations du véhicule: ${error.message}`;
+    }
+  }
+}
+
+// Fonction utilitaire pour générer des créneaux fictifs
+function generateFakeSlots(baseDate, garages) {
+  const slots = [];
+  
+  // Convertir en objet Date si c'est une chaîne
+  if (typeof baseDate === 'string') {
+    baseDate = new Date(baseDate);
+  }
+  
+  // Si date invalide, utiliser la date actuelle
+  if (!(baseDate instanceof Date && !isNaN(baseDate))) {
+    baseDate = new Date();
+  }
+  
+  // Générer des créneaux pour les 5 prochains jours
+  for (let dayOffset = 0; dayOffset < 5; dayOffset++) {
+    const currentDate = new Date(baseDate);
+    currentDate.setDate(currentDate.getDate() + dayOffset);
+    
+    // Exclure le dimanche
+    if (currentDate.getDay() === 0) continue;
+    
+    // Horaires: 9h-12h et 14h-17h
+    const morningHours = [9, 10, 11];
+    const afternoonHours = [14, 15, 16];
+    
+    // Pour chaque garage, générer quelques créneaux disponibles
+    garages.forEach(garage => {
+      // Créneaux du matin
+      morningHours.forEach(hour => {
+        // Ajouter seulement si aléatoire > 0.3 (simulation de disponibilité)
+        if (Math.random() > 0.3) {
+          slots.push({
+            garage: garage.name,
+            address: garage.address,
+            city: garage.city,
+            date: formatDate(currentDate),
+            time: `${hour}:00`,
+            available: true
+          });
+        }
+      });
+      
+      // Créneaux de l'après-midi
+      afternoonHours.forEach(hour => {
+        if (Math.random() > 0.3) {
+          slots.push({
+            garage: garage.name,
+            address: garage.address,
+            city: garage.city,
+            date: formatDate(currentDate),
+            time: `${hour}:00`,
+            available: true
+          });
+        }
+      });
+    });
+  }
+  
+  return slots;
+}
+
+// Fonction pour formater une date
+function formatDate(date) {
+  return `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
+}
+
+// Exportation des outils
+const listServicesTools = new ListServicesTools();
+const getAvailableSlotsTools = new GetAvailableSlotsTools();
+const bookSlotTools = new BookSlotTools();
+const getVehicleInfoTools = new GetVehicleInfoTools();
 
 module.exports = {
   listServicesTools,
   getAvailableSlotsTools,
-  bookSlotTools
+  bookSlotTools,
+  getVehicleInfoTools
 }; 
