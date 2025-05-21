@@ -1,142 +1,115 @@
-# Chatbot IA pour Garage Automobile
+# Auto Service Pro - Chatbot de Réservation
 
-Un chatbot simplifié pour la prise de rendez-vous dans un garage automobile. Ce projet utilise une architecture modulaire avec LangChain et Ollama.
+Un chatbot intelligent utilisant un modèle LLM pour faciliter la prise de rendez-vous dans un garage automobile.
 
-## Architecture
+## 🚀 Fonctionnalités
 
-Le projet est organisé de manière modulaire :
+- Identification du véhicule utilisateur via sa plaque d'immatriculation
+- Sélection du service/opération à effectuer
+- Suggestion des garages les plus proches
+- Choix des créneaux de rendez-vous disponibles
+- Confirmation et récapitulatif de la réservation
 
-- `server.js` : Point d'entrée principal, serveur Express
-- `src/` : Répertoire principal du code source
-  - `agents/` : Agents de conversation
-  - `config/` : Configuration et constantes
-  - `llm/` : Configuration des modèles LLM
-  - `models/` : Modèles de données
-  - `services/` : Services (API, etc.)
-  - `utils/` : Utilitaires (formatage, parsing)
-  - `index.js` : Point d'entrée du chatbot
+## 📋 Workflow de réservation
 
-## Fonctionnalités
+1. **Identification du véhicule** - Récupération des informations via la plaque d'immatriculation
+2. **Sélection du service** - Choix parmi les opérations disponibles
+3. **Choix du garage** - Suggestion basée sur la localisation de l'utilisateur
+4. **Sélection de créneau** - Propositions de créneaux disponibles
+5. **Confirmation** - Récapitulatif et validation finale
 
-- Conversation en langage naturel
-- Détection des intentions utilisateur (service, date, heure, etc.)
-- Gestion des plaque d'immatriculation
-- Confirmation de rendez-vous
-- API pour intégration web
+## 🛠️ Technologies
 
-## Installation
+- Node.js avec Express
+- LangChain pour la gestion du LLM
+- Ollama comme backend LLM (modèle Mistral)
+- Interface utilisateur responsive en HTML/CSS/JS
 
-1. Cloner le dépôt
-2. Installer les dépendances :
-   ```
-   npm install
-   ```
-3. Lancer le serveur :
-   ```
-   npm start
-   ```
+## 🔧 Installation
 
-## API
-
-- `POST /api/chat` : Envoyer un message au chatbot
-  ```json
-  {
-    "message": "Je voudrais prendre rendez-vous pour une vidange mardi prochain à Lyon"
-  }
-  ```
-
-- `POST /api/reset` : Réinitialiser la conversation
-
-## Technologies utilisées
-
-- Node.js
-- Express
-- LangChain
-- Ollama (modèle Mistral)
-
-## Prérequis
-
-- Node.js v14+
-- Accès à une installation Docker (optionnel, pour tests BDD)
-- API Backend Symfony (optionnel, le chatbot fonctionne en mode dégradé sans API)
-
-## Configuration
-
-1. Créer un fichier `.env` basé sur `.env.example`
-2. Configurer l'URL de l'API et autres paramètres
-
-## Utilisation
-
-### Démarrer le serveur
-
+1. Clonez le dépôt
 ```bash
-node server.js
+git clone https://github.com/votre-utilisateur/auto-service-pro-chatbot.git
+cd auto-service-pro-chatbot
 ```
 
-Le serveur sera disponible à l'adresse http://localhost:3000.
-
-### Tester les conversations
-
-Pour exécuter les tests de conversation:
-
+2. Installez les dépendances
 ```bash
-node test-simple.js
+npm install
 ```
 
-Pour des tests plus complets:
-
-```bash
-node test-conversation-avancee.js
+3. Configurez les variables d'environnement en créant un fichier `.env`
+```
+PORT=3000
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=mistral
+OLLAMA_TEMPERATURE=0.3
+API_URL=http://localhost:8000
 ```
 
-Pour des tests avec vérification en base de données:
-
+4. Démarrez Ollama (si installé localement)
 ```bash
-node test-complet.js
+ollama run mistral
 ```
 
-## Architecture
-
-### Composants principaux
-
-- **orchestrator.js**: Orchestrateur principal du chatbot, gère le flux de conversation
-- **model.js**: Configuration du modèle LLM (Mistral)
-- **server.js**: Serveur Express exposant l'API du chatbot
-- **test-*.js**: Scripts de test pour valider différents aspects du chatbot
-
-### Mode de fonctionnement
-
-Le chatbot utilise une approche hybride:
-1. Il tente d'abord d'utiliser l'API backend pour récupérer/enregistrer des données
-2. Si l'API n'est pas disponible, il utilise un mode dégradé avec des données par défaut
-3. Pour les environnements de développement avec Docker, il peut interagir directement avec la base de données
-
-## Intégration avec MySQL via Docker
-
-Si Docker est disponible, le chatbot peut interagir directement avec la base de données MySQL:
-
+5. Lancez l'application
 ```bash
-# Vérifier les rendez-vous existants
-docker exec -it mysql_database mysql -u user -puserpassword myapp -e "SELECT * FROM appointment;"
-
-# Vérifier les véhicules existants
-docker exec -it mysql_database mysql -u user -puserpassword myapp -e "SELECT * FROM vehicule;"
+npm start
 ```
 
-## Dépannage
+## 📡 API Backend
 
-### Problèmes courants
+Le chatbot interagit avec une API backend qui fournit les données suivantes:
 
-- **API Backend inaccessible**: Le chatbot continuera de fonctionner en mode dégradé
-- **Erreurs de base de données**: Vérifier les logs pour identifier les problèmes d'insertion
-- **Erreurs de format**: Les plaques d'immatriculation doivent être au format XX-XXX-XX
+- **VehiculeController**: 
+  - `GET /api/vehicules/{immatriculation}` - Infos sur un véhicule via sa plaque
 
-## Documentation supplémentaire
+- **OperationController**:
+  - `GET /api/operations/` - Liste des opérations disponibles
+  - `GET /api/operations/{categoryId}` - Opérations par catégorie
 
-Voir le fichier `AMELIORATIONS.md` pour les dernières améliorations apportées au projet.
+- **OperationCategoryController**:
+  - `GET /api/operations/category` - Liste des catégories d'opérations
 
-## Maintenance
+- **GarageController**:
+  - `GET /api/garages` - Liste des garages
+  - `GET /api/garages?latitude=...&longitude=...` - Garages à proximité
 
-### Ajout de nouveaux services
+- **AppointmentController**:
+  - `GET /api/appointments/avaibilities` - Créneaux disponibles
 
-Pour ajouter de nouveaux services au garage, modifier la fonction `getPriceForService` dans `orchestrator.js`. 
+## 🧠 Prompt Engineering
+
+Le système utilise un prompt soigneusement construit pour garantir des réponses cohérentes en français, avec une attention particulière à:
+
+- Respect strict du workflow de réservation
+- Vérification/validation à chaque étape
+- Réponses courtes et précises
+- Gestion de la frustration/urgence utilisateur
+
+## 📱 Interface utilisateur
+
+L'interface propose:
+- Une conversation fluide avec l'assistant
+- Des suggestions rapides adaptées à chaque étape
+- Un indicateur de progression visuel
+- La possibilité de réinitialiser la conversation
+
+## 🧪 Mode de test
+
+Le système fonctionne même sans connexion API backend, en utilisant des données simulées pour permettre les tests.
+
+## 💻 Développement
+
+Pour lancer en mode développement avec redémarrage automatique:
+```bash
+npm run dev
+```
+
+## 📄 Licence
+
+MIT
+
+## 👥 Contributeurs
+
+- Votre Nom (@votre-nom) 

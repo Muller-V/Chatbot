@@ -1,111 +1,191 @@
 /**
- * Classe représentant l'état de la conversation du chatbot
+ * Class representing the chatbot conversation state
+ * Manages the step-by-step flow of the booking process
  */
+const { CONVERSATION_STEPS } = require('../config/constants');
+
 class ConversationState {
   constructor() {
     this.reset();
   }
 
   /**
-   * Réinitialise l'état de la conversation
+   * Reset the conversation state
    */
   reset() {
-    // Sauvegarder les véhicules mémorisés avant la réinitialisation
-    const savedVehicles = this.previousVehicles ? [...this.previousVehicles] : [];
+    // Current conversation step
+    this.currentStep = CONVERSATION_STEPS.VEHICLE_IDENTIFICATION;
     
-    // Informations sur le rendez-vous
-    this.service = null;       // Le service demandé (vidange, pneus, etc.)
-    this.jour = null;          // Le jour choisi pour le RDV
-    this.horaire = null;       // L'horaire choisi (matin, après-midi)
-    this.heuresPrecises = null; // Heure précise du rendez-vous (format: '10:30')
-    this.garage = null;        // Le garage choisi (Lyon, Nice)
-    this.confirmed = false;    // Si le RDV est confirmé
+    // Vehicle information
+    this.vehicle = {
+      licensePlate: null,
+      brand: null,
+      model: null,
+      confirmed: false
+    };
     
-    // Informations sur le véhicule
-    this.licensePlate = null;  // Plaque d'immatriculation
-    this.vehiculeModel = null; // Modèle du véhicule
-    this.vehiculeBrand = null; // Marque du véhicule
+    // Service information
+    this.service = {
+      id: null,
+      name: null,
+      price: null,
+      confirmed: false
+    };
     
-    // État du flux de conversation
-    this.askingForLicensePlate = false; // Si on demande actuellement la plaque d'immatriculation
-    this.askingForVehicleManually = false; // Si on demande manuellement les informations du véhicule
-    this.askingForVehicleBrand = false; // Si on demande la marque du véhicule
-    this.askingForVehicleModel = false; // Si on demande le modèle du véhicule
-    this.jourDate = null;      // Objet date détaillé pour le jour (jour, mois, année)
-    this.turnCount = 0;        // Compteur de tours de conversation
+    // Garage information
+    this.garage = {
+      id: null,
+      name: null,
+      address: null,
+      confirmed: false
+    };
     
-    // Sentiment utilisateur
+    // Appointment information
+    this.appointment = {
+      date: null,
+      time: null,
+      confirmed: false
+    };
+    
+    // Final confirmation status
+    this.finalConfirmation = false;
+    
+    // User sentiment for response adaptation
     this.userSentiment = {
-      isUrgent: false,         // Si l'utilisateur montre des signes d'urgence
-      isFrustrated: false,     // Si l'utilisateur montre des signes de frustration
-      isPositive: false,       // Si l'utilisateur montre des signes de satisfaction
+      isUrgent: false,
+      isFrustrated: false,
+      isPositive: false
     };
     
-    // Étape de confirmation
-    this.confirmationStep = {
-      pending: false,          // Si une confirmation est en attente
-      appointmentSummary: null // Résumé du rendez-vous à confirmer
-    };
-    
-    // Historique des véhicules
-    this.previousVehicles = savedVehicles; // Liste des véhicules précédemment utilisés par le client
+    // Metadata
+    this.turnCount = 0;
+    this.lastApiCallTime = null;
   }
 
   /**
-   * Vérifie si toutes les informations essentielles pour un rendez-vous sont présentes
-   * @returns {boolean} Vrai si toutes les informations sont présentes
+   * Move to the next conversation step if current step is confirmed
    */
-  hasAllAppointmentInfo() {
-    return this.service && this.jour && this.horaire && this.garage;
-  }
-
-  /**
-   * Vérifie si le rendez-vous est prêt à être confirmé (toutes les infos + plaque)
-   * @returns {boolean} Vrai si le rendez-vous est prêt à être confirmé
-   */
-  isReadyForConfirmation() {
-    return this.hasAllAppointmentInfo() && this.licensePlate;
-  }
-
-  /**
-   * Génère un résumé du rendez-vous
-   * @param {Object} servicePrices - Objet contenant les prix des services
-   * @returns {string|null} Résumé du rendez-vous ou null si des informations sont manquantes
-   */
-  generateSummary(servicePrices) {
-    if (!this.hasAllAppointmentInfo()) {
-      return null;
+  advanceStep() {
+    // Only advance if current step is confirmed
+    switch(this.currentStep) {
+      case CONVERSATION_STEPS.VEHICLE_IDENTIFICATION:
+        if (this.vehicle.confirmed) {
+          this.currentStep = CONVERSATION_STEPS.SERVICE_SELECTION;
+          return true;
+        }
+        break;
+      case CONVERSATION_STEPS.SERVICE_SELECTION:
+        if (this.service.confirmed) {
+          this.currentStep = CONVERSATION_STEPS.GARAGE_SELECTION;
+          return true;
+        }
+        break;
+      case CONVERSATION_STEPS.GARAGE_SELECTION:
+        if (this.garage.confirmed) {
+          this.currentStep = CONVERSATION_STEPS.TIME_SLOT_SELECTION;
+          return true;
+        }
+        break;
+      case CONVERSATION_STEPS.TIME_SLOT_SELECTION:
+        if (this.appointment.confirmed) {
+          this.currentStep = CONVERSATION_STEPS.CONFIRMATION;
+          return true;
+        }
+        break;
+      case CONVERSATION_STEPS.CONFIRMATION:
+        if (this.finalConfirmation) {
+          this.currentStep = CONVERSATION_STEPS.COMPLETED;
+          return true;
+        }
+        break;
     }
-    
-    let summary = `Récapitulatif du rendez-vous :\n`;
-    
-    // Service
-    const servicePrice = servicePrices[this.service] || 'prix à confirmer';
-    summary += `- Service : ${this.service} (${servicePrice})\n`;
-    
-    // Date
-    summary += `- Date : ${this.jour}\n`;
-    
-    // Horaire
-    if (this.heuresPrecises) {
-      summary += `- Heure : ${this.heuresPrecises}\n`;
-    } else {
-      summary += `- Période : ${this.horaire}\n`;
-    }
-    
-    // Garage
-    summary += `- Garage : ${this.garage}\n`;
-    
-    // Véhicule
-    if (this.licensePlate) {
-      summary += `- Véhicule : ${this.licensePlate}`;
-      if (this.vehiculeBrand && this.vehiculeModel) {
-        summary += ` (${this.vehiculeBrand} ${this.vehiculeModel})`;
+    return false;
+  }
+
+  /**
+   * Go back to a previous step
+   * @param {string} step - Step to return to
+   */
+  goToStep(step) {
+    if (Object.values(CONVERSATION_STEPS).includes(step)) {
+      this.currentStep = step;
+      
+      // Reset confirmations for this and all subsequent steps
+      if (step === CONVERSATION_STEPS.VEHICLE_IDENTIFICATION || 
+          this.currentStep === CONVERSATION_STEPS.VEHICLE_IDENTIFICATION) {
+        this.vehicle.confirmed = false;
       }
-      summary += `\n`;
+      
+      if (step === CONVERSATION_STEPS.SERVICE_SELECTION || 
+          this.currentStep === CONVERSATION_STEPS.SERVICE_SELECTION ||
+          !this.vehicle.confirmed) {
+        this.service.confirmed = false;
+      }
+      
+      if (step === CONVERSATION_STEPS.GARAGE_SELECTION || 
+          this.currentStep === CONVERSATION_STEPS.GARAGE_SELECTION ||
+          !this.service.confirmed) {
+        this.garage.confirmed = false;
+      }
+      
+      if (step === CONVERSATION_STEPS.TIME_SLOT_SELECTION || 
+          this.currentStep === CONVERSATION_STEPS.TIME_SLOT_SELECTION ||
+          !this.garage.confirmed) {
+        this.appointment.confirmed = false;
+      }
+      
+      this.finalConfirmation = false;
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Generate a summary of the booking
+   * @returns {string} Formatted summary of the booking details
+   */
+  generateSummary() {
+    let summary = "Récapitulatif de votre rendez-vous :\n";
+    
+    // Vehicle details
+    if (this.vehicle.brand && this.vehicle.model) {
+      summary += `- Véhicule : ${this.vehicle.brand} ${this.vehicle.model} (${this.vehicle.licensePlate})\n`;
+    } else if (this.vehicle.licensePlate) {
+      summary += `- Véhicule : ${this.vehicle.licensePlate}\n`;
+    }
+    
+    // Service details
+    if (this.service.name) {
+      const priceText = this.service.price ? ` (${this.service.price})` : '';
+      summary += `- Service : ${this.service.name}${priceText}\n`;
+    }
+    
+    // Garage details
+    if (this.garage.name) {
+      summary += `- Garage : ${this.garage.name}${this.garage.address ? ` (${this.garage.address})` : ''}\n`;
+    }
+    
+    // Appointment details
+    if (this.appointment.date) {
+      const timeText = this.appointment.time ? ` à ${this.appointment.time}` : '';
+      summary += `- Date : ${this.appointment.date}${timeText}\n`;
     }
     
     return summary;
+  }
+  
+  /**
+   * Check if all required information is present for booking
+   * @returns {boolean} True if all required information is available
+   */
+  isReadyForConfirmation() {
+    return (
+      this.vehicle.licensePlate && 
+      this.service.id && 
+      this.garage.id && 
+      this.appointment.date && 
+      this.appointment.time
+    );
   }
 }
 

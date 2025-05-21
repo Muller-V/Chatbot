@@ -1,50 +1,44 @@
 /**
- * Module pour initialiser le modèle LLM
+ * Module for LLM model initialization and configuration
  */
 const { Ollama } = require("langchain/llms/ollama");
 
 /**
- * Retourne une instance du modèle Ollama configurée
- * @returns {Ollama} Instance du modèle
+ * Returns a configured instance of the Ollama model
+ * @returns {Ollama} Configured model instance
  */
 function getOllamaModel() {
-  // Récupérer la configuration depuis les variables d'environnement ou utiliser des valeurs par défaut
+  // Get configuration from environment variables or use defaults
   const baseUrl = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
   const model = process.env.OLLAMA_MODEL || "mistral";
   const temperature = parseFloat(process.env.OLLAMA_TEMPERATURE || "0.3");
   
-  console.log(`🧠 Modèle LLM: ${model} (${baseUrl})`);
+  console.log(`🧠 LLM Model initialized: ${model} (${baseUrl})`);
   
-  // Gérer l'erreur "cannot unmarshal object into Go struct field GenerateRequest.prompt of type string"
-  // Cette erreur se produit lorsque le prompt envoyé à Ollama n'est pas une chaîne de caractères
   return new Ollama({
     baseUrl: baseUrl,
     model: model,
     temperature: temperature,
     topP: 0.9,
-    // Renforcer les instructions pour forcer les réponses en français
-    systemPrompt: "Tu es un agent de garage automobile français. TU DOIS RÉPONDRE EXCLUSIVEMENT EN FRANÇAIS sans aucune exception. N'utilise JAMAIS l'anglais. Réponds de manière claire, précise et concise, en français uniquement, comme un agent de garage professionnel. Évite les explications inutiles. Sois direct et courtois. Si tu réponds en anglais, tu ne seras pas utile.",
-    // Spécifier le formateur pour s'assurer que le prompt soit toujours une chaîne de caractères
-    formatMessages: async (messages) => {
+    // Ensure responses are in French with a stronger system directive
+    systemPrompt: "Tu es un assistant professionnel de garage automobile. Toutes tes réponses DOIVENT être EN FRANÇAIS EXCLUSIVEMENT. Sois concis, précis et courtois.",
+    // Handle potential prompt formatting issues
+    formatMessages: (messages) => {
       try {
-        // Vérifier si messages est une promesse
-        if (typeof messages === 'object' && messages.then) {
-          messages = await messages;
+        // If messages is a promise, resolve it
+        if (messages && typeof messages.then === 'function') {
+          return messages.then(resolvedMessages => {
+            return typeof resolvedMessages === 'string' 
+              ? resolvedMessages 
+              : JSON.stringify(resolvedMessages);
+          });
         }
         
-        // S'assurer que le prompt est une chaîne de caractères
-        if (typeof messages === 'object') {
-          return JSON.stringify(messages);
-        }
-        
-        if (typeof messages !== 'string') {
-          return `Tu es un agent de garage automobile. L'utilisateur demande: ${messages}`;
-        }
-        
-        return messages;
+        // Convert object to string if needed
+        return typeof messages === 'string' ? messages : JSON.stringify(messages);
       } catch (error) {
-        console.error("Erreur lors du formatage des messages:", error);
-        return "Tu es un agent de garage automobile. Réponds en français uniquement.";
+        console.error("Error formatting messages:", error);
+        return "Tu es un assistant de garage automobile. Réponds en français.";
       }
     }
   });

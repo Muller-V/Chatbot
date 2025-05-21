@@ -3,94 +3,183 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Auto Service Pro - Chatbot</title>
+    <title>Auto Service Pro - Assistant de réservation</title>
     <style>
+        :root {
+            --primary-color: #3498db;
+            --primary-dark: #2980b9;
+            --secondary-color: #ecf0f1;
+            --accent-color: #e74c3c;
+            --text-color: #2c3e50;
+            --light-gray: #f5f5f5;
+            --border-color: #ddd;
+            --success-color: #2ecc71;
+            --warning-color: #f39c12;
+            --error-color: #e74c3c;
+        }
+        
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             max-width: 800px;
             margin: 0 auto;
             padding: 20px;
-            background-color: #f5f5f5;
+            background-color: var(--light-gray);
+            color: var(--text-color);
+            line-height: 1.6;
         }
+        
+        header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .logo {
+            font-size: 2rem;
+            margin-right: 10px;
+        }
+        
         h1 {
-            color: #2c3e50;
-            text-align: center;
+            margin: 0;
+            font-size: 1.8rem;
         }
+        
         .chat-container {
             background-color: white;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            border-radius: 15px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
             overflow: hidden;
             margin-bottom: 20px;
-            height: 450px;
+            height: 500px;
             display: flex;
             flex-direction: column;
         }
+        
+        .chat-header {
+            padding: 15px;
+            background-color: var(--primary-color);
+            color: white;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .chat-header-text {
+            font-size: 1.1rem;
+        }
+        
+        .chat-header-status {
+            font-size: 0.9rem;
+            opacity: 0.8;
+            display: flex;
+            align-items: center;
+        }
+        
         .chat-messages {
             padding: 20px;
             flex-grow: 1;
             overflow-y: auto;
+            background-color: white;
+            scroll-behavior: smooth;
         }
+        
         .message {
             margin-bottom: 15px;
-            padding: 10px 15px;
+            padding: 12px 16px;
             border-radius: 20px;
             max-width: 80%;
             word-wrap: break-word;
+            position: relative;
+            animation: fadeIn 0.3s ease-in-out;
         }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
         .bot-message {
-            background-color: #f1f0f0;
+            background-color: var(--secondary-color);
             margin-right: auto;
+            border-bottom-left-radius: 5px;
         }
+        
         .user-message {
-            background-color: #3498db;
+            background-color: var(--primary-color);
             color: white;
             margin-left: auto;
+            border-bottom-right-radius: 5px;
         }
-        .chat-input {
-            display: flex;
-            padding: 15px;
-            background-color: #f9f9f9;
-            border-top: 1px solid #eee;
-        }
-        .chat-input input {
-            flex-grow: 1;
-            padding: 10px 15px;
-            border: 1px solid #ddd;
-            border-radius: 20px;
-            outline: none;
-        }
-        .chat-input button {
-            background-color: #3498db;
-            color: white;
-            border: none;
-            border-radius: 20px;
-            padding: 10px 20px;
-            margin-left: 10px;
-            cursor: pointer;
-        }
-        .chat-input button:hover {
-            background-color: #2980b9;
-        }
+        
         .quick-replies {
             display: flex;
             flex-wrap: wrap;
             gap: 8px;
             padding: 10px 15px;
-            background-color: #f9f9f9;
+            background-color: #f8f9fa;
+            border-top: 1px solid var(--border-color);
+            transition: all 0.3s ease;
         }
+        
         .quick-reply {
-            background-color: #e9ecef;
-            border: 1px solid #ced4da;
-            border-radius: 15px;
-            padding: 8px 12px;
+            background-color: white;
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 8px 14px;
             font-size: 14px;
             cursor: pointer;
             transition: all 0.2s ease;
+            user-select: none;
         }
+        
         .quick-reply:hover {
-            background-color: #d1d7dc;
+            background-color: #e9ecef;
+            transform: translateY(-2px);
         }
+        
+        .chat-input {
+            display: flex;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-top: 1px solid var(--border-color);
+        }
+        
+        .chat-input input {
+            flex-grow: 1;
+            padding: 12px 15px;
+            border: 1px solid var(--border-color);
+            border-radius: 25px;
+            outline: none;
+            font-size: 15px;
+            transition: border-color 0.2s;
+        }
+        
+        .chat-input input:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+        }
+        
+        .chat-input button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 25px;
+            padding: 12px 20px;
+            margin-left: 10px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.2s, transform 0.1s;
+        }
+        
+        .chat-input button:hover {
+            background-color: var(--primary-dark);
+        }
+        
+        .chat-input button:active {
+            transform: scale(0.98);
+        }
+        
         .reset-button {
             display: block;
             margin: 0 auto;
@@ -98,72 +187,283 @@
             color: white;
             border: none;
             border-radius: 5px;
-            padding: 10px 15px;
+            padding: 10px 20px;
             cursor: pointer;
-            transition: background-color 0.2s;
+            transition: all 0.2s;
+            font-weight: 600;
         }
+        
         .reset-button:hover {
             background-color: #5a6268;
+            transform: translateY(-2px);
         }
-        .loader {
-            display: none;
-            width: 20px;
-            height: 20px;
-            border: 3px solid #f3f3f3;
-            border-top: 3px solid #3498db;
-            border-radius: 50%;
-            margin: 0 auto;
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        .loading .loader {
-            display: inline-block;
-        }
-        .typing-indicator {
-            display: inline-flex;
+        
+        .loading-indicator {
+            display: flex;
             align-items: center;
             margin-left: 5px;
         }
-        .typing-indicator span {
+        
+        .loading-indicator span {
             height: 8px;
             width: 8px;
             margin: 0 1px;
-            background-color: #3498db;
+            background-color: var(--primary-color);
             border-radius: 50%;
             display: inline-block;
             animation: blink 1.4s infinite both;
         }
-        .typing-indicator span:nth-child(2) {
+        
+        .loading-indicator span:nth-child(2) {
             animation-delay: 0.2s;
         }
-        .typing-indicator span:nth-child(3) {
+        
+        .loading-indicator span:nth-child(3) {
             animation-delay: 0.4s;
         }
+        
         @keyframes blink {
             0% { opacity: 0.1; }
             20% { opacity: 1; }
             100% { opacity: 0.1; }
         }
+        
         .loading-message {
             display: flex;
             align-items: center;
         }
+        
+        @media (max-width: 600px) {
+            .chat-container {
+                height: 70vh;
+            }
+            
+            .message {
+                max-width: 90%;
+            }
+        }
+        
+        .step-indicator {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            position: relative;
+        }
+        
+        .step {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: var(--secondary-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            position: relative;
+            z-index: 2;
+            transition: all 0.3s ease;
+        }
+        
+        .step.active {
+            background: var(--primary-color);
+            color: white;
+            box-shadow: 0 3px 6px rgba(0, 0, 0, 0.2);
+            transform: scale(1.2);
+        }
+        
+        .step.completed {
+            background: var(--success-color);
+            color: white;
+        }
+        
+        .step-line {
+            position: absolute;
+            height: 3px;
+            background: var(--border-color);
+            top: 15px;
+            left: 30px;
+            right: 30px;
+            z-index: 1;
+        }
+        
+        .step-progress {
+            position: absolute;
+            height: 3px;
+            background: var(--primary-color);
+            top: 15px;
+            left: 30px;
+            z-index: 1;
+            transition: width 0.5s ease;
+        }
+        
+        .step-tooltip {
+            position: absolute;
+            top: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--text-color);
+            color: white;
+            border-radius: 3px;
+            padding: 3px 8px;
+            font-size: 0.8rem;
+            white-space: nowrap;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        
+        .step:hover .step-tooltip {
+            opacity: 1;
+        }
+        
+        /* System status indicator */
+        .status-online {
+            color: var(--success-color);
+            position: relative;
+            padding-left: 15px;
+        }
+        
+        .status-online:before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 50%;
+            width: 8px;
+            height: 8px;
+            background-color: var(--success-color);
+            border-radius: 50%;
+            transform: translateY(-50%);
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(46, 204, 113, 0.4); }
+            70% { box-shadow: 0 0 0 5px rgba(46, 204, 113, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(46, 204, 113, 0); }
+        }
+        
+        /* API status notifications */
+        .api-status {
+            font-size: 0.8rem;
+            margin-left: 10px;
+            padding: 3px 8px;
+            border-radius: 10px;
+            background-color: rgba(255, 255, 255, 0.2);
+            visibility: hidden;
+            opacity: 0;
+            transition: all 0.3s ease;
+        }
+        
+        .api-status.visible {
+            visibility: visible;
+            opacity: 1;
+        }
+        
+        /* Loading message with typing animation */
+        .typing-dots span {
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            margin: 0 2px;
+            background-color: var(--primary-color);
+            border-radius: 50%;
+            animation: bounce 1.4s infinite ease-in-out both;
+        }
+        
+        .typing-dots span:nth-child(1) {
+            animation-delay: -0.32s;
+        }
+        
+        .typing-dots span:nth-child(2) {
+            animation-delay: -0.16s;
+        }
+        
+        @keyframes bounce {
+            0%, 80%, 100% { 
+                transform: scale(0);
+            } 40% { 
+                transform: scale(1.0);
+            }
+        }
+        
+        /* Message with thinking animation */
+        .thinking {
+            font-style: italic;
+            color: #777;
+            display: flex;
+            align-items: center;
+        }
+        
+        /* Visual feedback for steps */
+        .step.active {
+            transform: scale(1.2);
+            background-color: var(--primary-color);
+            color: white;
+            box-shadow: 0 0 10px rgba(52, 152, 219, 0.5);
+            animation: pulseStep 2s infinite;
+        }
+        
+        @keyframes pulseStep {
+            0% { box-shadow: 0 0 0 0 rgba(52, 152, 219, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(52, 152, 219, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(52, 152, 219, 0); }
+        }
+        
+        .system-action {
+            font-style: italic;
+            color: var(--warning-color);
+            font-size: 0.85em;
+            margin-top: 4px;
+            margin-bottom: 4px;
+        }
     </style>
 </head>
 <body>
-    <h1>🔧 Auto Service Pro - Chatbot</h1>
+    <header>
+        <div class="logo">🔧</div>
+        <h1>Auto Service Pro - Assistant de réservation</h1>
+    </header>
+    
+    <div class="step-indicator">
+        <div class="step-line"></div>
+        <div class="step-progress"></div>
+        <div class="step" data-step="1">
+            <span class="step-tooltip">Identification véhicule</span>
+            1
+        </div>
+        <div class="step" data-step="2">
+            <span class="step-tooltip">Choix du service</span>
+            2
+        </div>
+        <div class="step" data-step="3">
+            <span class="step-tooltip">Sélection garage</span>
+            3
+        </div>
+        <div class="step" data-step="4">
+            <span class="step-tooltip">Choix date et heure</span>
+            4
+        </div>
+        <div class="step" data-step="5">
+            <span class="step-tooltip">Confirmation</span>
+            5
+        </div>
+    </div>
+    
     <div class="chat-container">
+        <div class="chat-header">
+            <div class="chat-header-text">Assistant Auto Service Pro - BOB</div>
+            <div class="chat-header-status">
+                <span id="status-indicator" class="status-online">En ligne</span>
+                <span id="api-status" class="api-status"></span>
+            </div>
+        </div>
         <div id="chat-messages" class="chat-messages">
-            <div class="message bot-message">Bonjour ! Comment puis-je vous aider avec votre véhicule aujourd'hui ?</div>
+            <div class="message bot-message">Bonjour ! Je suis BOB, votre assistant virtuel Auto Service Pro. Comment puis-je vous aider avec votre véhicule aujourd'hui ?</div>
         </div>
         <div id="quick-replies" class="quick-replies">
+            <div class="quick-reply" onclick="sendMessage('AA-123-BB')">AA-123-BB</div>
             <div class="quick-reply" onclick="sendMessage('Je voudrais faire une vidange')">Vidange</div>
             <div class="quick-reply" onclick="sendMessage('Changement de pneus')">Pneus</div>
             <div class="quick-reply" onclick="sendMessage('Contrôle technique')">Contrôle technique</div>
-            <div class="quick-reply" onclick="sendMessage('Quels sont vos services ?')">Services</div>
         </div>
         <div class="chat-input">
             <input type="text" id="user-input" placeholder="Tapez votre message ici...">
@@ -173,30 +473,134 @@
     <button class="reset-button" onclick="resetConversation()">Nouvelle conversation</button>
 
     <script>
-        // Suggestions rapides pour chaque étape de la conversation
+        // Session ID management (in a production app, this would be a proper session/user ID)
+        const sessionId = 'session_' + Date.now();
+        
+        // Current step (1-5)
+        let currentStep = 1;
+        
+        // Update the step indicator with animation
+        function updateStepIndicator(step) {
+            // Don't update if we're already at this step or if it's invalid
+            if (step < 1 || step > 5 || step === currentStep) return;
+            
+            // Update step classes with animation
+            document.querySelectorAll('.step').forEach((el, index) => {
+                el.classList.remove('active');
+                
+                if (index + 1 < step) {
+                    if (!el.classList.contains('completed')) {
+                        el.classList.add('completed');
+                        el.style.animation = 'fadeIn 0.5s';
+                        setTimeout(() => { el.style.animation = ''; }, 500);
+                    }
+                } else if (index + 1 === step) {
+                    el.classList.add('active');
+                    el.style.animation = 'fadeIn 0.5s, pulseStep 2s infinite';
+                    setTimeout(() => { el.style.animation = 'pulseStep 2s infinite'; }, 500);
+                } else {
+                    el.classList.remove('completed');
+                }
+            });
+            
+            // Update progress bar with animation
+            const progressEl = document.querySelector('.step-progress');
+            const progressWidth = ((step - 1) / 4) * 100;
+            progressEl.style.width = progressWidth + '%';
+            
+            // Update current step
+            currentStep = step;
+            
+            // Add system action message for step change
+            if (step > 1) {
+                const stepNames = [
+                    "Identification du véhicule", 
+                    "Sélection du service",
+                    "Choix du garage",
+                    "Sélection du créneau",
+                    "Confirmation de la réservation"
+                ];
+                
+                addSystemActionMessage(`Étape ${step}: ${stepNames[step-1]}`);
+            }
+        }
+        
+        // Add a system action message
+        function addSystemActionMessage(message) {
+            const chatMessages = document.getElementById('chat-messages');
+            const messageElement = document.createElement('div');
+            messageElement.classList.add('system-action');
+            messageElement.textContent = message;
+            chatMessages.appendChild(messageElement);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        
+        // Quick reply suggestions for different steps
         const quickReplySuggestions = {
-            'services': [
-                'Vidange', 'Pneus', 'Contrôle technique', 'Freins', 'Climatisation'
+            // Step 1: Vehicle Identification
+            'vehicle_identification': [
+                'AA-123-BB', 'Renault Clio 2018', 'Peugeot 308', 
+                'Toyota Yaris hybride', 'BMW Série 3'
             ],
-            'jour': [
-                'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Semaine prochaine'
+            // Step 2: Service Selection
+            'service_selection': [
+                'Vidange', 'Changement de pneus', 'Contrôle technique', 
+                'Réparation des freins', 'Entretien climatisation'
             ],
-            'horaire': [
-                'Le matin', 'L\'après-midi', '10h', '14h', '16h'
+            // Step 3: Garage Selection
+            'garage_selection': [
+                'Paris', 'Lyon', 'Nice', 'Garage le plus proche', 'Voir tous les garages'
             ],
-            'garage': [
-                'Lyon', 'Nice'
+            // Step 4: Time Slot Selection
+            'time_slot_selection': [
+                'Demain matin', 'Mercredi après-midi', 'Cette semaine',
+                'Lundi 10h', 'Le plus tôt possible'
             ],
+            // Step 5: Confirmation
             'confirmation': [
-                'Oui', 'Non', 'Je confirme'
-            ],
-            'plaque': [
-                'AB-123-CD', 'XX-000-YY'
+                'Oui, je confirme', 'Non, je veux modifier', 
+                'Quelle est la durée estimée?', 'Confirmer'
             ]
         };
 
-        // Fonction pour ajouter un message au chat
-        function addMessage(message, isUser = false, isLoading = false) {
+        // Add function to show API status notifications with different status types
+        function showApiStatus(message, type = 'info', duration = 3000) {
+            const apiStatus = document.getElementById('api-status');
+            apiStatus.textContent = message;
+            
+            // Reset previous classes
+            apiStatus.classList.remove('visible', 'status-info', 'status-warning', 'status-error', 'status-success');
+            
+            // Add appropriate class based on type
+            apiStatus.classList.add('visible');
+            apiStatus.classList.add(`status-${type}`);
+            
+            // Style based on type
+            switch(type) {
+                case 'warning':
+                    apiStatus.style.backgroundColor = 'rgba(243, 156, 18, 0.2)';
+                    apiStatus.style.color = '#f39c12';
+                    break;
+                case 'error':
+                    apiStatus.style.backgroundColor = 'rgba(231, 76, 60, 0.2)';
+                    apiStatus.style.color = '#e74c3c';
+                    break;
+                case 'success':
+                    apiStatus.style.backgroundColor = 'rgba(46, 204, 113, 0.2)';
+                    apiStatus.style.color = '#2ecc71';
+                    break;
+                default: // info
+                    apiStatus.style.backgroundColor = 'rgba(52, 152, 219, 0.2)';
+                    apiStatus.style.color = '#3498db';
+            }
+            
+            setTimeout(() => {
+                apiStatus.classList.remove('visible');
+            }, duration);
+        }
+        
+        // Enhanced version of addMessage function to support typing animation
+        function addMessage(message, isUser = false, isLoading = false, isThinking = false) {
             const chatMessages = document.getElementById('chat-messages');
             const messageElement = document.createElement('div');
             messageElement.classList.add('message');
@@ -204,7 +608,12 @@
             
             if (isLoading) {
                 messageElement.classList.add('loading-message');
-                messageElement.innerHTML = `${message} <div class="typing-indicator"><span></span><span></span><span></span></div>`;
+                messageElement.innerHTML = `${message} <div class="typing-dots"><span></span><span></span><span></span></div>`;
+                showApiStatus("Consultation des données...", 'info');
+            } else if (isThinking) {
+                messageElement.classList.add('thinking');
+                messageElement.innerHTML = `${message} <div class="typing-dots"><span></span><span></span><span></span></div>`;
+                showApiStatus("BOB réfléchit...", 'info');
             } else {
                 messageElement.textContent = message;
             }
@@ -214,54 +623,72 @@
             return messageElement;
         }
 
-        // Fonction pour déterminer les suggestions basées sur la réponse du bot
-        function getSuggestionsForResponse(botResponse) {
-            const lowercaseResponse = botResponse.toLowerCase();
-            
-            if (lowercaseResponse.includes('services') || 
-                lowercaseResponse.includes('propose') || 
-                lowercaseResponse.includes('disponible')) {
-                return quickReplySuggestions.services;
-            } 
-            else if ((lowercaseResponse.includes('quel jour') || 
-                     lowercaseResponse.includes('quelle date') || 
-                     lowercaseResponse.includes('quand') ||
-                     lowercaseResponse.includes('semaine')) && 
-                     !lowercaseResponse.includes('confirmé')) {
-                return quickReplySuggestions.jour;
-            } 
-            else if (lowercaseResponse.includes('heure') || 
-                     lowercaseResponse.includes('horaire') || 
-                     lowercaseResponse.includes('matin') || 
-                     lowercaseResponse.includes('après-midi')) {
-                return quickReplySuggestions.horaire;
-            } 
-            else if (lowercaseResponse.includes('garage') || 
-                     lowercaseResponse.includes('ville') || 
-                     lowercaseResponse.includes('lyon') || 
-                     lowercaseResponse.includes('nice')) {
-                return quickReplySuggestions.garage;
-            } 
-            else if (lowercaseResponse.includes('plaque') || 
-                     lowercaseResponse.includes('immatriculation')) {
-                return quickReplySuggestions.plaque;
-            }
-            else if (lowercaseResponse.includes('confirm') || 
-                     lowercaseResponse.includes('récapitulatif') || 
-                     lowercaseResponse.includes('validez')) {
-                return quickReplySuggestions.confirmation;
+        // Function to determine step from response and process state
+        function determineStepFromResponse(botResponse, processState) {
+            // First check if we got a step from the backend
+            if (processState && processState.currentStep > 0) {
+                return processState.currentStep;
             }
             
-            // Si aucune correspondance, retourner les suggestions de services par défaut
-            return quickReplySuggestions.services;
+            const lowerResponse = botResponse.toLowerCase();
+            
+            // Check for step indicators in the response
+            if (lowerResponse.includes('plaque d\'immatriculation') || 
+                lowerResponse.includes('véhicule') ||
+                lowerResponse.includes('marque') ||
+                lowerResponse.includes('modèle')) {
+                return 1; // Vehicle identification
+            } else if (lowerResponse.includes('services disponibles') || 
+                     lowerResponse.includes('quel service') ||
+                     lowerResponse.includes('prestations')) {
+                return 2; // Service selection  
+            } else if (lowerResponse.includes('garages disponibles') || 
+                     lowerResponse.includes('quel garage') ||
+                     lowerResponse.includes('établissement')) {
+                return 3; // Garage selection
+            } else if (lowerResponse.includes('créneaux disponibles') || 
+                     lowerResponse.includes('horaire') ||
+                     lowerResponse.includes('date') ||
+                     lowerResponse.includes('rendez-vous')) {
+                return 4; // Time slot selection
+            } else if (lowerResponse.includes('confirmer') || 
+                     lowerResponse.includes('récapitulatif') ||
+                     lowerResponse.includes('résumé') ||
+                     lowerResponse.includes('réservation confirmée')) {
+                return 5; // Confirmation
+            }
+            
+            // Default: don't change step if we can't determine
+            return currentStep;
         }
 
-        // Fonction pour mettre à jour les suggestions rapides
-        function updateQuickReplies(botResponse) {
+        // Function to determine suggestions based on the response
+        function getSuggestionsForResponse(botResponse, processState) {
+            const step = determineStepFromResponse(botResponse, processState);
+            updateStepIndicator(step);
+            
+            switch(step) {
+                case 1:
+                    return quickReplySuggestions.vehicle_identification;
+                case 2:
+                    return quickReplySuggestions.service_selection;
+                case 3:
+                    return quickReplySuggestions.garage_selection;
+                case 4:
+                    return quickReplySuggestions.time_slot_selection;
+                case 5:
+                    return quickReplySuggestions.confirmation;
+                default:
+                    return quickReplySuggestions.vehicle_identification;
+            }
+        }
+
+        // Function to update quick replies
+        function updateQuickReplies(botResponse, processState) {
             const quickRepliesContainer = document.getElementById('quick-replies');
             quickRepliesContainer.innerHTML = '';
             
-            const suggestions = getSuggestionsForResponse(botResponse);
+            const suggestions = getSuggestionsForResponse(botResponse, processState);
             
             for (const suggestion of suggestions) {
                 const quickReply = document.createElement('div');
@@ -274,7 +701,7 @@
             }
         }
 
-        // Fonction pour envoyer un message au chatbot
+        // Enhanced sendMessage function with better feedback
         function sendMessage(messageText = null) {
             const userInput = document.getElementById('user-input');
             const sendButton = document.getElementById('send-button');
@@ -282,97 +709,138 @@
             
             if (!message) return;
             
-            // Désactiver le bouton pendant l'envoi
+            // Disable send button while processing
             sendButton.disabled = true;
-            sendButton.classList.add('loading');
-            sendButton.innerHTML = '<div class="loader"></div>';
+            sendButton.textContent = '...';
             
-            // Afficher le message de l'utilisateur
+            // Display user message
             addMessage(message, true);
             userInput.value = '';
             
-            // Envoyer la requête au chatbot
+            // Show thinking indicator
+            const thinkingMsg = addMessage("BOB réfléchit...", false, false, true);
+            
+            // Send request to chatbot API
             fetch('/api/chat', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ message })
+                body: JSON.stringify({ 
+                    message,
+                    sessionId
+                })
             })
             .then(response => response.json())
             .then(data => {
-                // Réactiver le bouton
+                // Remove thinking indicator
+                if (thinkingMsg && thinkingMsg.parentNode) {
+                    thinkingMsg.parentNode.removeChild(thinkingMsg);
+                }
+                
+                // Re-enable send button
                 sendButton.disabled = false;
-                sendButton.classList.remove('loading');
-                sendButton.innerHTML = 'Envoyer';
+                sendButton.textContent = 'Envoyer';
                 
                 if (data.success && data.botResponse) {
                     let loadingMessage = null;
                     
-                    // Si la réponse contient isLoading=true, afficher un message de chargement
-                    if (data.isLoading) {
-                        loadingMessage = addMessage(data.botResponse, false, true);
+                    // Check for API calls in response
+                    if (data.botResponse.includes("Je vérifie") || 
+                        data.botResponse.includes("Je consulte") ||
+                        data.botResponse.includes("Je recherche")) {
                         
-                        // Faire une nouvelle requête après 1,5 secondes
+                        addSystemActionMessage("BOB consulte notre système d'information...");
+                        showApiStatus("Vérification des données...", 'info', 2500);
+                    }
+                    
+                    // Handle loading state for backend processing
+                    if (data.isLoading || (data.processState && data.processState.isProcessing)) {
+                        loadingMessage = addMessage("Je consulte nos systèmes pour vous apporter les informations les plus précises...", false, true);
+                        showApiStatus("Recherche en cours...", 'info', 5000);
+                        
+                        // Make a follow-up request after delay
                         setTimeout(() => {
                             fetch('/api/chat', {
                                 method: 'POST',
                                 headers: {
                                     'Content-Type': 'application/json'
                                 },
-                                body: JSON.stringify({ message: "continuation" })
+                                body: JSON.stringify({ 
+                                    message: "continuation",
+                                    sessionId 
+                                })
                             })
                             .then(response => response.json())
                             .then(followupData => {
-                                // Supprimer le message de chargement
-                                if (loadingMessage) {
-                                    chatMessages.removeChild(loadingMessage);
+                                // Remove loading message
+                                if (loadingMessage && loadingMessage.parentNode) {
+                                    loadingMessage.parentNode.removeChild(loadingMessage);
                                 }
                                 
                                 if (followupData.success && followupData.botResponse) {
-                                    // Afficher la réponse du chatbot
-                                    addMessage(followupData.botResponse);
-                                    // Mettre à jour les suggestions rapides
-                                    updateQuickReplies(followupData.botResponse);
+                                    // Show API status completion
+                                    showApiStatus("Données récupérées", 'success', 2000);
+                                    
+                                    // Add bot response with subtle animation
+                                    setTimeout(() => {
+                                        // Add bot response
+                                        addMessage(followupData.botResponse);
+                                        // Update quick replies
+                                        updateQuickReplies(followupData.botResponse, followupData.processState);
+                                    }, 500);
                                 }
                             })
                             .catch(error => {
-                                console.error('Erreur lors de la continuation:', error);
-                                if (loadingMessage) {
-                                    chatMessages.removeChild(loadingMessage);
+                                console.error('Error on continuation request:', error);
+                                if (loadingMessage && loadingMessage.parentNode) {
+                                    loadingMessage.parentNode.removeChild(loadingMessage);
                                 }
+                                showApiStatus("Erreur de connexion", 'error', 3000);
                                 addMessage('Désolé, une erreur est survenue lors de la récupération des données.');
                             });
                         }, 1500);
                     } else {
-                        // Afficher la réponse du chatbot normalement
+                        // Normal response
                         addMessage(data.botResponse);
-                        // Mettre à jour les suggestions rapides
-                        updateQuickReplies(data.botResponse);
+                        // Update quick replies based on response and process state
+                        updateQuickReplies(data.botResponse, data.processState);
                     }
                 } else {
+                    showApiStatus("Erreur", 'error', 3000);
                     addMessage('Désolé, une erreur est survenue. Veuillez réessayer.');
                 }
             })
             .catch(error => {
-                console.error('Erreur:', error);
+                console.error('Error:', error);
+                // Remove thinking indicator
+                if (thinkingMsg && thinkingMsg.parentNode) {
+                    thinkingMsg.parentNode.removeChild(thinkingMsg);
+                }
+                
+                showApiStatus("Erreur de connexion", 'error', 3000);
                 addMessage('Désolé, une erreur de connexion est survenue. Veuillez réessayer.');
                 
-                // Réactiver le bouton
+                // Re-enable send button
                 sendButton.disabled = false;
-                sendButton.classList.remove('loading');
-                sendButton.innerHTML = 'Envoyer';
+                sendButton.textContent = 'Envoyer';
             });
         }
 
-        // Fonction pour réinitialiser la conversation
+        // Function to reset the conversation
         function resetConversation() {
             const resetButton = document.querySelector('.reset-button');
             resetButton.disabled = true;
             resetButton.textContent = 'Réinitialisation...';
             
+            showApiStatus("Réinitialisation en cours...", 'warning', 2000);
+            
             fetch('/api/reset', {
-                method: 'POST'
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ sessionId })
             })
             .then(response => response.json())
             .then(data => {
@@ -380,43 +848,38 @@
                 resetButton.textContent = 'Nouvelle conversation';
                 
                 if (data.success) {
-                    // Effacer tous les messages existants
+                    // Clear existing messages
                     document.getElementById('chat-messages').innerHTML = '';
-                    // Afficher le message d'accueil
+                    // Add welcome message
                     addMessage(data.botResponse);
                     
-                    // Réinitialiser les suggestions rapides
-                    const initialSuggestions = ['Vidange', 'Pneus', 'Contrôle technique', 'Services'];
-                    const quickRepliesContainer = document.getElementById('quick-replies');
-                    quickRepliesContainer.innerHTML = '';
+                    // Show success message
+                    showApiStatus("Conversation réinitialisée", 'success', 2000);
                     
-                    for (const suggestion of initialSuggestions) {
-                        const quickReply = document.createElement('div');
-                        quickReply.classList.add('quick-reply');
-                        quickReply.textContent = suggestion;
-                        quickReply.addEventListener('click', function() {
-                            sendMessage(suggestion);
-                        });
-                        quickRepliesContainer.appendChild(quickReply);
-                    }
+                    // Reset step indicator to step 1
+                    updateStepIndicator(1);
+                    
+                    // Reset quick replies to initial state
+                    updateQuickReplies(data.botResponse, null);
                 }
             })
             .catch(error => {
-                console.error('Erreur lors de la réinitialisation:', error);
+                console.error('Error during reset:', error);
                 resetButton.disabled = false;
                 resetButton.textContent = 'Nouvelle conversation';
+                showApiStatus("Échec de la réinitialisation", 'error', 3000);
                 addMessage('Désolé, une erreur est survenue lors de la réinitialisation.');
             });
         }
 
-        // Permettre l'envoi de message avec la touche "Entrée"
+        // Send message with Enter key
         document.getElementById('user-input').addEventListener('keypress', function(event) {
             if (event.key === 'Enter') {
                 sendMessage();
             }
         });
         
-        // Focus sur l'input au chargement
+        // Focus input on page load
         document.getElementById('user-input').focus();
     </script>
 </body>

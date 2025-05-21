@@ -1,54 +1,89 @@
-const express = require("express");
-const cors = require("cors");
-const dotenv = require("dotenv");
-const { processMessage } = require("./orchestrator");
+/**
+ * Auto Service Pro Chatbot - Main entry point
+ * Handles API routes and serves the frontend 
+ */
+require('dotenv').config();
+const express = require('express');
+const bodyParser = require('body-parser');
+const path = require('path');
+const ChatAgent = require('./src/agents/chatAgent');
 
-// Chargement des variables d'environnement
-dotenv.config();
-
-// Initialisation de l'application Express
+// Create Express app
 const app = express();
-const PORT = process.env.PORT || 3000;
+const port = process.env.PORT || 3000;
 
-// Middleware
-app.use(cors());
-app.use(express.json());
+// Configure middleware
+app.use(bodyParser.json());
+app.use(express.static('public'));
 
-// Route de santé
-app.get("/health", (req, res) => {
-  res.status(200).json({ status: "ok", message: "Garage AI Chatbot API is running" });
-});
+// Create a chatbot instance map to handle multiple sessions
+// In a production app, this would use proper session management
+const chatbots = new Map();
 
-// Route principale pour le chat
-app.post("/chat", async (req, res) => {
+// Initialize a default chatbot
+let defaultChatbot;
+(async () => {
+  defaultChatbot = await new ChatAgent().initialize();
+  console.log('Default chatbot initialized');
+})();
+
+// API Routes
+app.post('/api/chat', async (req, res) => {
   try {
-    const { message } = req.body;
+    const { message, sessionId = 'default' } = req.body;
     
-    // Validation basique
-    if (!message || typeof message !== "string") {
-      return res.status(400).json({ 
-        success: false, 
-        error: "Le message est requis et doit être une chaîne de caractères" 
-      });
+    // Get or create a chatbot for this session
+    let chatbot = chatbots.get(sessionId);
+    if (!chatbot) {
+      chatbot = defaultChatbot || await new ChatAgent().initialize();
+      chatbots.set(sessionId, chatbot);
     }
     
-    // Traitement du message par l'orchestrateur
-    const response = await processMessage(message);
-    
-    // Retour de la réponse
-    res.status(200).json(response);
+    // Process the message
+    const result = await chatbot.processMessage(message);
+    res.json(result);
   } catch (error) {
-    console.error("Erreur dans le traitement de la requête:", error);
+    console.error('Error processing message:', error);
     res.status(500).json({
       success: false,
-      error: "Une erreur est survenue lors du traitement de votre demande"
+      botResponse: "Je suis désolé, une erreur est survenue. Comment puis-je vous aider aujourd'hui ?"
     });
   }
 });
 
-// Démarrage du serveur
-app.listen(PORT, () => {
-  console.log(`🤖 Garage AI Chatbot API running on port ${PORT}`);
-  console.log(`📝 Health check: http://localhost:${PORT}/health`);
-  console.log(`💬 Chat endpoint: http://localhost:${PORT}/chat (POST)`);
+app.post('/api/reset', async (req, res) => {
+  try {
+    const { sessionId = 'default' } = req.body;
+    
+    // Get chatbot for this session
+    let chatbot = chatbots.get(sessionId);
+    if (chatbot) {
+      chatbot.reset();
+    } else {
+      chatbot = defaultChatbot || await new ChatAgent().initialize();
+      chatbots.set(sessionId, chatbot);
+    }
+    
+    res.json({
+      success: true,
+      botResponse: "Bonjour ! Comment puis-je vous aider avec votre véhicule aujourd'hui ?"
+    });
+  } catch (error) {
+    console.error('Error resetting chatbot:', error);
+    res.status(500).json({
+      success: false,
+      botResponse: "Je suis désolé, une erreur est survenue lors de la réinitialisation."
+    });
+  }
+});
+
+// Serve the frontend
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Start the server
+app.listen(port, () => {
+  console.log(`🚀 Auto Service Pro Chatbot running on port ${port}`);
+  console.log(`📱 Access the chatbot at http://localhost:${port}`);
 }); 
