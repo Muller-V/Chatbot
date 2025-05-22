@@ -10,14 +10,59 @@ class ApiService {
       baseURL: API_BASE_URL,
       timeout: 5000
     });
+    
+    // État d'authentification
+    this.isAuthenticated = false;
+    this.authToken = null;
   }
 
   /**
-   * Check if the API is available
+   * Authentifie le service avec l'API backend
+   * @returns {Promise<boolean>} True si l'authentification a réussi
+   */
+  async authenticate() {
+    try {
+      const response = await this.apiClient.post('/api/login_check', {
+        email: 'racoon@admin.fr',
+        password: 'racoonadmin'
+      });
+      
+      if (response.data && response.data.token) {
+        this.authToken = response.data.token;
+        this.isAuthenticated = true;
+        
+        // Configurer l'intercepteur pour ajouter automatiquement le token à tous les appels
+        this.apiClient.interceptors.request.use(config => {
+          config.headers['Authorization'] = `Bearer ${this.authToken}`;
+          return config;
+        });
+        
+        console.log('API authentication successful');
+        return true;
+      } else {
+        console.error('API authentication failed: No token received');
+        return false;
+      }
+    } catch (error) {
+      console.error('API authentication error:', error.message);
+      return false;
+    }
+  }
+
+  /**
+   * Check if the API is available and authenticates if necessary
    * @returns {Promise<boolean>} True if API is available
    */
   async checkApiAvailability() {
     try {
+      // Authentifier d'abord
+      if (!this.isAuthenticated) {
+        const authSuccess = await this.authenticate();
+        if (!authSuccess) {
+          return false;
+        }
+      }
+      
       await this.apiClient.get('/api/garages');
       return true;
     } catch (error) {
@@ -33,6 +78,11 @@ class ApiService {
    */
   async getVehicleInfo(licensePlate) {
     try {
+      // Authentifier si nécessaire
+      if (!this.isAuthenticated) {
+        await this.authenticate();
+      }
+      
       const response = await this.apiClient.get(`/api/vehicules/${licensePlate}`);
       return response.data;
     } catch (error) {
@@ -48,6 +98,11 @@ class ApiService {
    */
   async getOperations(categoryId = null) {
     try {
+      // Authentifier si nécessaire
+      if (!this.isAuthenticated) {
+        await this.authenticate();
+      }
+      
       const url = categoryId ? `/api/operations/${categoryId}` : '/api/operations';
       const response = await this.apiClient.get(url);
       return response.data;
@@ -63,6 +118,11 @@ class ApiService {
    */
   async getOperationCategories() {
     try {
+      // Authentifier si nécessaire
+      if (!this.isAuthenticated) {
+        await this.authenticate();
+      }
+      
       const response = await this.apiClient.get('/api/operations/category');
       return response.data;
     } catch (error) {
@@ -79,6 +139,11 @@ class ApiService {
    */
   async getNearbyGarages(latitude, longitude) {
     try {
+      // Authentifier si nécessaire
+      if (!this.isAuthenticated) {
+        await this.authenticate();
+      }
+      
       const response = await this.apiClient.get('/api/garages', {
         params: { latitude, longitude }
       });
@@ -95,6 +160,11 @@ class ApiService {
    */
   async getAllGarages() {
     try {
+      // Authentifier si nécessaire
+      if (!this.isAuthenticated) {
+        await this.authenticate();
+      }
+      
       const response = await this.apiClient.get('/api/garages');
       return response.data;
     } catch (error) {
@@ -112,6 +182,11 @@ class ApiService {
    */
   async getAvailableTimeSlots(garageId, serviceId, date) {
     try {
+      // Authentifier si nécessaire
+      if (!this.isAuthenticated) {
+        await this.authenticate();
+      }
+      
       const response = await this.apiClient.get('/api/appointments/avaibilities', {
         params: { garage_id: garageId, service_id: serviceId, date }
       });
@@ -129,6 +204,11 @@ class ApiService {
    */
   async bookAppointment(appointmentData) {
     try {
+      // Authentifier si nécessaire
+      if (!this.isAuthenticated) {
+        await this.authenticate();
+      }
+      
       const response = await this.apiClient.post('/api/appointments', appointmentData);
       return response.status === 201; // Created
     } catch (error) {

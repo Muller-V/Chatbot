@@ -1,7 +1,4 @@
-/**
- * Class representing the chatbot conversation state
- * Manages the step-by-step flow of the booking process
- */
+
 const { CONVERSATION_STEPS } = require('../config/constants');
 
 class ConversationState {
@@ -9,14 +6,12 @@ class ConversationState {
     this.reset();
   }
 
-  /**
-   * Reset the conversation state
-   */
+
   reset() {
-    // Current conversation step
+
     this.currentStep = CONVERSATION_STEPS.VEHICLE_IDENTIFICATION;
     
-    // Vehicle information
+
     this.vehicle = {
       licensePlate: null,
       brand: null,
@@ -24,7 +19,7 @@ class ConversationState {
       confirmed: false
     };
     
-    // Service information
+
     this.service = {
       id: null,
       name: null,
@@ -32,7 +27,7 @@ class ConversationState {
       confirmed: false
     };
     
-    // Garage information
+
     this.garage = {
       id: null,
       name: null,
@@ -40,33 +35,31 @@ class ConversationState {
       confirmed: false
     };
     
-    // Appointment information
+
     this.appointment = {
       date: null,
       time: null,
       confirmed: false
     };
     
-    // Final confirmation status
+
     this.finalConfirmation = false;
     
-    // User sentiment for response adaptation
+
     this.userSentiment = {
       isUrgent: false,
       isFrustrated: false,
       isPositive: false
     };
     
-    // Metadata
+
     this.turnCount = 0;
     this.lastApiCallTime = null;
   }
 
-  /**
-   * Move to the next conversation step if current step is confirmed
-   */
+
   advanceStep() {
-    // Only advance if current step is confirmed
+
     switch(this.currentStep) {
       case CONVERSATION_STEPS.VEHICLE_IDENTIFICATION:
         if (this.vehicle.confirmed) {
@@ -102,15 +95,12 @@ class ConversationState {
     return false;
   }
 
-  /**
-   * Go back to a previous step
-   * @param {string} step - Step to return to
-   */
+
   goToStep(step) {
     if (Object.values(CONVERSATION_STEPS).includes(step)) {
       this.currentStep = step;
       
-      // Reset confirmations for this and all subsequent steps
+
       if (step === CONVERSATION_STEPS.VEHICLE_IDENTIFICATION || 
           this.currentStep === CONVERSATION_STEPS.VEHICLE_IDENTIFICATION) {
         this.vehicle.confirmed = false;
@@ -140,32 +130,29 @@ class ConversationState {
     return false;
   }
 
-  /**
-   * Generate a summary of the booking
-   * @returns {string} Formatted summary of the booking details
-   */
+
   generateSummary() {
     let summary = "Récapitulatif de votre rendez-vous :\n";
     
-    // Vehicle details
+
     if (this.vehicle.brand && this.vehicle.model) {
       summary += `- Véhicule : ${this.vehicle.brand} ${this.vehicle.model} (${this.vehicle.licensePlate})\n`;
     } else if (this.vehicle.licensePlate) {
       summary += `- Véhicule : ${this.vehicle.licensePlate}\n`;
     }
     
-    // Service details
+
     if (this.service.name) {
       const priceText = this.service.price ? ` (${this.service.price})` : '';
       summary += `- Service : ${this.service.name}${priceText}\n`;
     }
     
-    // Garage details
+
     if (this.garage.name) {
       summary += `- Garage : ${this.garage.name}${this.garage.address ? ` (${this.garage.address})` : ''}\n`;
     }
     
-    // Appointment details
+
     if (this.appointment.date) {
       const timeText = this.appointment.time ? ` à ${this.appointment.time}` : '';
       summary += `- Date : ${this.appointment.date}${timeText}\n`;
@@ -174,10 +161,7 @@ class ConversationState {
     return summary;
   }
   
-  /**
-   * Check if all required information is present for booking
-   * @returns {boolean} True if all required information is available
-   */
+
   isReadyForConfirmation() {
     return (
       this.vehicle.licensePlate && 

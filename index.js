@@ -17,13 +17,14 @@ app.use(bodyParser.json());
 app.use(express.static('public'));
 
 // Create a chatbot instance map to handle multiple sessions
-// In a production app, this would use proper session management
 const chatbots = new Map();
 
 // Initialize a default chatbot
 let defaultChatbot;
 (async () => {
-  defaultChatbot = await new ChatAgent().initialize();
+  // Créer l'instance de ChatAgent d'abord, puis initialiser
+  defaultChatbot = new ChatAgent();
+  await defaultChatbot.initialize();
   console.log('Default chatbot initialized');
 })();
 
@@ -32,10 +33,16 @@ app.post('/api/chat', async (req, res) => {
   try {
     const { message, sessionId = 'default' } = req.body;
     
+    // Vérifier si l'agent par défaut existe
+    if (!defaultChatbot) {
+      defaultChatbot = new ChatAgent();
+      await defaultChatbot.initialize();
+    }
+    
     // Get or create a chatbot for this session
     let chatbot = chatbots.get(sessionId);
     if (!chatbot) {
-      chatbot = defaultChatbot || await new ChatAgent().initialize();
+      chatbot = defaultChatbot;
       chatbots.set(sessionId, chatbot);
     }
     
@@ -55,12 +62,18 @@ app.post('/api/reset', async (req, res) => {
   try {
     const { sessionId = 'default' } = req.body;
     
+    // Vérifier si l'agent par défaut existe
+    if (!defaultChatbot) {
+      defaultChatbot = new ChatAgent();
+      await defaultChatbot.initialize();
+    }
+    
     // Get chatbot for this session
     let chatbot = chatbots.get(sessionId);
     if (chatbot) {
       chatbot.reset();
     } else {
-      chatbot = defaultChatbot || await new ChatAgent().initialize();
+      chatbot = defaultChatbot;
       chatbots.set(sessionId, chatbot);
     }
     
@@ -75,6 +88,18 @@ app.post('/api/reset', async (req, res) => {
       botResponse: "Je suis désolé, une erreur est survenue lors de la réinitialisation."
     });
   }
+});
+
+// Ajouter une route d'état pour le chatbot
+app.get('/api/status', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Le serveur du chatbot est en ligne',
+    config: {
+      port: port,
+      api: process.env.API_URL || 'http://localhost:8000'
+    }
+  });
 });
 
 // Serve the frontend

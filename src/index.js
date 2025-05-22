@@ -1,57 +1,75 @@
+const express = require('express');
+const cors = require('cors');
+const rateLimit = require('express-rate-limit');
 const ChatAgent = require('./agents/chatAgent');
 const { detectConfirmationOrDenial } = require('./utils/messageParser');
 
-let agentInstance = null;
-let pendingOperation = null;
+const app = express();
+const PORT = process.env.PORT || 3000;
 
-async function processMessage(message) {
+app.use(express.json());
+app.use(cors());
+
+const limiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Trop de requêtes, veuillez réessayer plus tard.' }
+});
+
+app.use('/api', limiter);
+
+const chatAgents = {};
+
+app.post('/api/chat', async (req, res) => {
   try {
-    if (!agentInstance) {
-      console.log('Initialisation de l\'agent...');
-      const agent = new ChatAgent();
-      agentInstance = await agent.initialize();
+    const { message, sessionId = 'default' } = req.body;
+    
+    if (!message) {
+      return res.status(400).json({ error: 'Le message est requis' });
     }
     
-    // Si c'est un message de continuation et qu'une opération est en attente
-    if (message === "continuation" && pendingOperation) {
-      console.log('Continuation détectée, traitement de l\'opération en attente...');
-      const result = await pendingOperation();
-      pendingOperation = null;
-      return result;
+    if (!chatAgents[sessionId]) {
+      console.log(`Creating new chat agent for session ${sessionId}`);
+      chatAgents[sessionId] = await new ChatAgent().initialize();
     }
     
-    // Sinon, traiter normalement le message
-    const response = await agentInstance.processMessage(message);
+    const result = await chatAgents[sessionId].processMessage(message);
     
-    // Si la réponse indique un chargement, configurer l'opération en attente
-    if (response.isLoading) {
-      if (agentInstance.isSearchingBackend) {
-        if (agentInstance.state.confirmationStep.pending && 
-            detectConfirmationOrDenial(message).isConfirmation) {
-          pendingOperation = async () => await agentInstance.handleConfirmation();
-        } else if (agentInstance.state.askingForLicensePlate && 
-                  agentInstance.state.licensePlate) {
-          pendingOperation = async () => await agentInstance.handleLicensePlateProvided();
-        }
-      }
-    }
-    
-    return response;
+    res.json(result);
   } catch (error) {
-    console.error('Erreur lors du traitement du message:', error);
-    pendingOperation = null;
-    return {
-      success: true,
-      botResponse: "Je suis désolé, une erreur s'est produite. Nos services principaux comprennent la vidange (80€), le changement de pneus (70€/pneu), le contrôle technique (89€). Quel jour souhaitez-vous prendre rendez-vous ?"
-    };
+    console.error('Error processing chat request:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Erreur lors du traitement de la demande',
+      botResponse: "Je suis désolé, une erreur s'est produite. Comment puis-je vous aider ?"
+    });
   }
-}
+});
 
-function resetConversation() {
-  if (agentInstance) {
-    agentInstance.reset();
-    pendingOperation = null;
+app.post('/api/reset', (req, res) => {
+  try {
+    const { sessionId = 'default' } = req.body;
+    
+    if (chatAgents[sessionId]) {
+      chatAgents[sessionId].reset();
+      console.log(`Chat session reset: ${sessionId}`);
+    }
+    
+    res.json({ success: true, message: 'Session réinitialisée' });
+  } catch (error) {
+    console.error('Error resetting chat session:', error);
+    res.status(500).json({ success: false, error: 'Erreur lors de la réinitialisation de la session' });
   }
-}
+});
 
-module.exports = { processMessage, resetConversation }; 
+app.use(express.static('public'));
+
+app.get('*', (req, res) => {
+  res.sendFile(path.resolve(__dirname, '../public', 'index.html'));
+});
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+}); 

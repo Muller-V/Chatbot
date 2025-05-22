@@ -1,19 +1,12 @@
-/**
- * Garage booking chatbot agent
- * Handles conversation flow, state management, and API integration
- */
 const { BufferMemory } = require("langchain/memory");
 const { getOllamaModel } = require("../llm/model");
-const { SYSTEM_TEMPLATE, CONVERSATION_STEPS, DEFAULT_SERVICES, DEFAULT_GARAGES } = require("../config/constants");
+const { SYSTEM_TEMPLATE, CONVERSATION_STEPS } = require("../config/constants");
 const ConversationState = require("../models/ConversationState");
 const apiService = require("../services/apiService");
-
-// Utility for detecting user sentiment
 const { detectUserSentiment } = require("../utils/messageParser");
 
 class ChatAgent {
   constructor() {
-    // Memory for conversation history
     this.memory = new BufferMemory({
       memoryKey: "chat_history",
       returnMessages: true,
@@ -23,49 +16,118 @@ class ChatAgent {
       aiPrefix: "Assistant",
     });
 
-    // LLM model
     this.model = getOllamaModel();
-    
-    // Conversation state
     this.state = new ConversationState();
-    
-    // API status
     this.apiAvailable = false;
-    
-    // Processing flags
     this.isProcessing = false;
+    this.debug = false;
   }
 
-  /**
-   * Initialize the agent
-   * @returns {Promise<ChatAgent>} This agent instance
-   */
   async initialize() {
-    this.apiAvailable = await apiService.checkApiAvailability();
-    console.log(`API available: ${this.apiAvailable ? 'yes' : 'no, using mock data'}`);
+    try {
+      console.log('Initializing chat agent...');
+
+      this.state = new ConversationState();
+
+      this.memory = new BufferMemory({
+        memoryKey: "chat_history",
+        returnMessages: true,
+        inputKey: "input", 
+        outputKey: "output",
+        humanPrefix: "User",
+        aiPrefix: "Assistant",
+      });
+
+      this.model = getOllamaModel();
+      this.state.availableServices = [];
+      this.state.availableGarages = [];
+
+      try {
+        const authSuccess = await apiService.authenticate();
+        if (authSuccess) {
+          this.apiAvailable = true;
+          console.log('API authentication successful');
+        } else {
+          console.warn('API authentication failed, will use fallback data');
+          this.apiAvailable = false;
+        }
+      } catch (authError) {
+        console.warn('Error during API authentication:', authError);
+        this.apiAvailable = false;
+      }
+
+      try {
+        const operationsData = await apiService.getOperations();
+        if (operationsData && operationsData.length > 0) {
+          this.state.availableServices = operationsData;
+          console.log(`Services préchargés avec succès (${operationsData.length})`);
+          console.log("SERVICES DISPONIBLES:");
+          for (const service of operationsData) {
+            console.log(`- ${service.id}: ${service.name} (${service.price || 'prix non défini'})`);
+          }
+        }
+      } catch (servicesError) {
+        console.warn('Impossible de précharger les services:', servicesError);
+        this.state.availableServices = [
+          { id: '1', name: 'Vidange', price: '80€' },
+          { id: '2', name: 'Service Huile Moteur', price: '75€' },
+          { id: '3', name: 'Service Microfiltre d\'huile', price: '45€' },
+          { id: '4', name: 'Service Filtre à Air', price: '35€' }
+        ];
+        console.log("Services de secours chargés:", this.state.availableServices.length);
+      }
+
+      try {
+        const garagesData = await apiService.getAllGarages();
+        if (garagesData && garagesData.garages && garagesData.garages.length > 0) {
+          this.state.availableGarages = garagesData.garages;
+          console.log(`Garages préchargés avec succès (${garagesData.garages.length})`);
+        }
+      } catch (garagesError) {
+        console.warn('Impossible de précharger les garages:', garagesError);
+        this.state.availableGarages = [
+          { id: '1', name: 'Paris', address: '23 Avenue de la République, 75011 Paris' },
+          { id: '2', name: 'Lyon', address: '6 Rue Joannès Carret, 69009 Lyon' }
+        ];
+      }
+
+      console.log('Chat agent initialized');
+      return this;
+    } catch (error) {
+      console.error('Error initializing chat agent:', error);
     return this;
+    }
   }
 
-  /**
-   * Process a user message
-   * @param {string} message - User message
-   * @returns {Promise<{success: boolean, botResponse: string, isLoading?: boolean}>} Bot response
-   */
   async processMessage(message) {
     try {
-      // Prevent concurrent processing
+      // Prevent concurrent processing with timeout
       if (this.isProcessing) {
-        return {
-          success: true,
-          botResponse: "Je suis en train de traiter votre demande, un instant s'il vous plaît..."
-        };
+        // Vérifier si le traitement est bloqué depuis trop longtemps (plus de 5 secondes)
+        const now = Date.now();
+        if (this.processingStartTime && (now - this.processingStartTime > 5000)) {
+          // Forcer la réinitialisation si bloqué trop longtemps
+          console.log("Processus bloqué détecté, réinitialisation forcée");
+          this.isProcessing = false;
+        } else {
+          // Réponse plus utile en cas de traitement en cours
+          return {
+            success: true,
+            botResponse: "Quel service automobile vous intéresse aujourd'hui ?"
+          };
+        }
       }
       
+      // Enregistrer l'heure de début de traitement
       this.isProcessing = true;
+      this.processingStartTime = Date.now();
       
       // Handle "continuation" message specially (used for follow-up requests)
       if (message === "continuation") {
-        return await this.processContinuationMessage();
+        const result = await this.processContinuationMessage();
+        this.isProcessing = false;
+        this.processingStartTime = null;
+        return result;
       }
 
       // Update sentiment
@@ -73,6 +135,171 @@ class ChatAgent {
       
       // Increment turn counter
       this.state.turnCount++;
+      
+      if (this.debug) {
+        console.log(`[DEBUG] Current step: ${this.state.currentStep}`);
+        console.log(`[DEBUG] Vehicle state: ${JSON.stringify(this.state.vehicle)}`);
+        console.log(`[DEBUG] Service state: ${JSON.stringify(this.state.service)}`);
+        console.log(`[DEBUG] Garage state: ${JSON.stringify(this.state.garage)}`);
+      }
+      
+      // Forcer la progression si une plaque est détectée et que nous sommes au début
+      const licensePlateRegex = /([A-Z]{2})-(\d{3})-([A-Z]{2})/i;
+      const plateMatch = message.match(licensePlateRegex);
+      
+      if (plateMatch && this.state.currentStep === CONVERSATION_STEPS.VEHICLE_IDENTIFICATION) {
+        const licensePlate = plateMatch[0].toUpperCase();
+        this.state.vehicle.licensePlate = licensePlate;
+        this.state.vehicle.confirmed = true;
+        
+        // Forcer l'avancement à l'étape suivante
+        const didAdvance = this.state.advanceStep();
+        
+        // Message concis pour la recherche du véhicule
+        this.isProcessing = false;
+        this.processingStartTime = null;
+        
+        if (didAdvance) {
+          console.log(`[DEBUG] Avancé à l'étape ${this.state.currentStep} après détection de plaque`);
+          return {
+            success: true,
+            botResponse: `Véhicule ${licensePlate} identifié. Quel service souhaitez-vous ?`,
+            isLoading: false
+          };
+        } else {
+          return {
+            success: true,
+            botResponse: `Je recherche votre véhicule ${licensePlate}...`,
+            isLoading: true
+          };
+        }
+      }
+      
+      // Détecter les services spécifiques dans le message si nous sommes à l'étape appropriée
+      if ((this.state.currentStep === CONVERSATION_STEPS.SERVICE_SELECTION || 
+          (this.state.currentStep === CONVERSATION_STEPS.VEHICLE_IDENTIFICATION && this.state.vehicle.confirmed)) 
+          && !this.state.service.id) {
+        const lowerMessage = message.toLowerCase();
+        
+        // Ajout de détection spécifique pour "Service Huile Moteur"
+        if (lowerMessage.includes('huile moteur')) {
+          if (this.state.availableServices && this.state.availableServices.length > 0) {
+            for (const service of this.state.availableServices) {
+              if (service.name && 
+                  service.name.toLowerCase().includes('huile moteur')) {
+                this.state.service.id = service.id;
+                this.state.service.name = service.name;
+                this.state.service.price = service.price;
+                this.state.service.confirmed = true;
+                
+                // Si nous sommes encore à l'étape d'identification du véhicule,
+                // passer d'abord à la sélection de service
+                if (this.state.currentStep === CONVERSATION_STEPS.VEHICLE_IDENTIFICATION) {
+                  this.state.advanceStep();
+                }
+                
+                // Puis avancer à l'étape garage
+                this.state.advanceStep();
+                
+                console.log(`[DEBUG] Service "Huile Moteur" détecté et sélectionné: ${service.id}, étape: ${this.state.currentStep}`);
+                
+                // Retourner immédiatement pour passer à l'étape suivante
+                this.isProcessing = false;
+                this.processingStartTime = null;
+                return {
+                  success: true,
+                  botResponse: "Service huile moteur sélectionné. Recherche des garages disponibles...",
+                  isLoading: true
+                };
+              }
+            }
+          }
+        }
+        
+        // Recherche directe des noms de services exacts y compris "microfiltre"
+        if (lowerMessage.includes('microfiltre') || lowerMessage.includes('filtre')) {
+          // Chercher dans les services disponibles
+          if (this.state.availableServices && this.state.availableServices.length > 0) {
+            for (const service of this.state.availableServices) {
+              if (service.name && 
+                  (service.name.toLowerCase().includes('microfiltre') || 
+                   service.name.toLowerCase().includes('filtre'))) {
+                this.state.service.id = service.id;
+                this.state.service.name = service.name;
+                this.state.service.price = service.price;
+                this.state.service.confirmed = true;
+                
+                // Si nous sommes encore à l'étape d'identification du véhicule,
+                // passer d'abord à la sélection de service
+                if (this.state.currentStep === CONVERSATION_STEPS.VEHICLE_IDENTIFICATION) {
+                  this.state.advanceStep();
+                }
+                
+                // Puis avancer à l'étape garage
+                this.state.advanceStep();
+                
+                console.log(`[DEBUG] Service "Filtre" détecté et sélectionné: ${service.id}, étape: ${this.state.currentStep}`);
+                
+                // Retourner immédiatement pour passer à l'étape suivante
+                this.isProcessing = false;
+                this.processingStartTime = null;
+                return {
+                  success: true,
+                  botResponse: `Service ${service.name} sélectionné. Recherche des garages disponibles...`,
+                  isLoading: true
+                };
+              }
+            }
+          }
+        }
+        
+        // Détection générique de services par mots-clés
+        const serviceKeywords = [
+          { keyword: 'vidange', id: '1' },
+          { keyword: 'pneu', id: '7' },
+          { keyword: 'contrôle', id: '8' },
+          { keyword: 'frein', id: '5' },
+          { keyword: 'climatisation', id: '6' },
+          { keyword: 'huile', id: '2' },
+          { keyword: 'filtre', id: '9' }
+        ];
+        
+        for (const keyword of serviceKeywords) {
+          if (lowerMessage.includes(keyword.keyword)) {
+            if (this.state.availableServices && this.state.availableServices.length > 0) {
+              for (const service of this.state.availableServices) {
+                if ((service.id === keyword.id) || 
+                    (service.name && service.name.toLowerCase().includes(keyword.keyword))) {
+                  this.state.service.id = service.id;
+                  this.state.service.name = service.name;
+                  this.state.service.price = service.price;
+                  this.state.service.confirmed = true;
+                  
+                  // Si nous sommes encore à l'étape d'identification du véhicule,
+                  // passer d'abord à la sélection de service
+                  if (this.state.currentStep === CONVERSATION_STEPS.VEHICLE_IDENTIFICATION) {
+                    this.state.advanceStep();
+                  }
+                  
+                  // Puis avancer à l'étape garage
+                  this.state.advanceStep();
+                  
+                  console.log(`[DEBUG] Service par mot-clé détecté: ${keyword.keyword} -> ${service.id}, étape: ${this.state.currentStep}`);
+                  
+                  // Retourner immédiatement pour passer à l'étape suivante
+                  this.isProcessing = false;
+                  this.processingStartTime = null;
+                  return {
+                    success: true,
+                    botResponse: `Service ${service.name} sélectionné. Recherche des garages disponibles...`,
+                    isLoading: true
+                  };
+                }
+              }
+            }
+          }
+        }
+      }
       
       // Process based on current conversation step
       let response;
@@ -97,8 +324,8 @@ class ChatAgent {
           break;
         default:
           response = {
-          success: true,
-            botResponse: "Je ne comprends pas où nous en sommes. Souhaitez-vous prendre un nouveau rendez-vous ?"
+            success: true,
+            botResponse: "Souhaitez-vous prendre un nouveau rendez-vous ?"
           };
       }
       
@@ -106,682 +333,419 @@ class ChatAgent {
       await this.saveToMemory(message, response.botResponse);
       
       this.isProcessing = false;
+      this.processingStartTime = null;
       return response;
     } catch (error) {
       console.error("Error processing message:", error);
       this.isProcessing = false;
+      this.processingStartTime = null;
       return {
         success: false,
-        botResponse: "Je suis désolé, une erreur est survenue. Comment puis-je vous aider avec votre véhicule aujourd'hui ?"
+        botResponse: "Comment puis-je vous aider avec votre véhicule aujourd'hui ?"
       };
     }
   }
 
-  /**
-   * Handle continuation message when retrieving data from backend
-   * @returns {Promise<{success: boolean, botResponse: string}>} Bot response
-   */
   async processContinuationMessage() {
-    let response = {
-      success: true,
-      botResponse: "Je n'ai pas pu terminer l'opération précédente. Comment puis-je vous aider ?"
-    };
-    
-    // Process based on current step
-    switch (this.state.currentStep) {
-      case CONVERSATION_STEPS.VEHICLE_IDENTIFICATION:
-        if (this.state.vehicle.licensePlate) {
-          response = await this.handleVehicleDataResponse();
-        }
-        break;
-      case CONVERSATION_STEPS.SERVICE_SELECTION:
-        response = await this.handleServiceDataResponse();
-        break;
-      case CONVERSATION_STEPS.GARAGE_SELECTION:
-        response = await this.handleGarageDataResponse();
-        break;
-      case CONVERSATION_STEPS.TIME_SLOT_SELECTION:
-        response = await this.handleTimeSlotDataResponse();
-        break;
-    }
-    
-    this.isProcessing = false;
-    return response;
-  }
-
-  /**
-   * Handle vehicle identification step
-   * @param {string} message - User message
-   * @returns {Promise<{success: boolean, botResponse: string, isLoading?: boolean}>} Bot response
-   */
-  async handleVehicleIdentificationStep(message) {
-    // Check for license plate in message using regex
-    const licensePlateRegex = /([A-Z]{2})-(\d{3})-([A-Z]{2})/i;
-    const match = message.match(licensePlateRegex);
-    
-    if (match) {
-      const licensePlate = match[0].toUpperCase();
-      this.state.vehicle.licensePlate = licensePlate;
-      
-      // Signal we're looking up vehicle information with a more conversational response
-          return {
-            success: true,
-        botResponse: `Merci pour votre plaque d'immatriculation ${licensePlate}. Je consulte notre base de données pour récupérer les informations de votre véhicule. Un instant s'il vous plaît...`,
-        isLoading: true
-      };
-    }
-    
-    // If we're at the beginning of the conversation, be more direct about asking for the license plate
-    if (this.state.turnCount <= 1) {
-          return {
-            success: true,
-        botResponse: "Bonjour ! Je suis BOB, votre assistant de réservation Auto Service Pro. Pour commencer, pourriez-vous me communiquer votre plaque d'immatriculation au format AA-123-AA ?"
-      };
-    }
-    
-    // If no license plate found in message, ask using the LLM with context about current step
-    const prompt = await this.buildSystemPrompt(message);
-    const botResponse = await this.model.call(prompt);
-    
-    return { success: true, botResponse };
-  }
-
-  /**
-   * Handle response after vehicle data lookup
-   * @returns {Promise<{success: boolean, botResponse: string}>} Bot response
-   */
-  async handleVehicleDataResponse() {
     try {
-      // Get vehicle info from API
-      const vehicleData = this.apiAvailable 
-        ? await apiService.getVehicleInfo(this.state.vehicle.licensePlate)
-        : { brand: "Renault", model: "Clio", year: "2020" };  // Mock data if API unavailable
-      
-      if (vehicleData) {
-        this.state.vehicle.brand = vehicleData.brand;
-        this.state.vehicle.model = vehicleData.model;
-        
-        // Generate confirmation message for vehicle with a more conversational tone
-        const confirmMessage = `J'ai trouvé votre véhicule dans notre base de données ! Il s'agit d'une ${vehicleData.brand} ${vehicleData.model} (immatriculation ${this.state.vehicle.licensePlate}). Est-ce bien votre véhicule ?`;
-        return { success: true, botResponse: confirmMessage };
-      } else {
-        const errorMessage = `Je n'ai pas trouvé de véhicule correspondant à l'immatriculation ${this.state.vehicle.licensePlate} dans notre base de données. Pourriez-vous vérifier que la plaque est correcte ou nous fournir un autre numéro d'immatriculation ?`;
-        this.state.vehicle.licensePlate = null;
-        return { success: true, botResponse: errorMessage };
+      // Si on était en train de traiter un service, on vérifie si on peut avancer
+      if (this.state.currentStep === CONVERSATION_STEPS.SERVICE_SELECTION && this.state.service.name) {
+        // Si le service a déjà été identifié, mais pas confirmé
+        if (!this.state.service.confirmed) {
+          this.state.service.confirmed = true;
+          this.state.advanceStep();
+          
+          // Passer immédiatement à la sélection de garage
+          return {
+            success: true,
+            botResponse: "Recherche des garages disponibles...",
+            isLoading: true
+          };
+        }
       }
-    } catch (error) {
-      console.error("Error retrieving vehicle data:", error);
+      
+      // Si on était en train de traiter un garage, vérifier si on peut avancer
+      if (this.state.currentStep === CONVERSATION_STEPS.GARAGE_SELECTION && this.state.garage.name) {
+        if (!this.state.garage.confirmed) {
+          this.state.garage.confirmed = true;
+          this.state.advanceStep();
+          
+          // Passer immédiatement à la sélection des horaires
+          return {
+            success: true,
+            botResponse: "Recherche des horaires disponibles pour ce garage...",
+            isLoading: true
+          };
+        }
+      }
+      
+      // Si on était en train de confirmer, faire la confirmation finale
+      if (this.state.currentStep === CONVERSATION_STEPS.CONFIRMATION && !this.state.finalConfirmation) {
+        // Vérifier que toutes les données sont disponibles, sinon utiliser des valeurs par défaut
+        if (!this.state.isReadyForConfirmation()) {
+          // Utiliser des valeurs par défaut si nécessaire
+          if (!this.state.vehicle.licensePlate) {
+            this.state.vehicle.licensePlate = "non spécifié";
+          }
+          
+          if (!this.state.service.id) {
+            // Prendre le premier service disponible si aucun n'est sélectionné
+            if (this.state.availableServices && this.state.availableServices.length > 0) {
+              this.state.service.id = this.state.availableServices[0].id;
+              this.state.service.name = this.state.availableServices[0].name;
+              this.state.service.price = this.state.availableServices[0].price;
+            } else {
+              this.state.service.name = "service standard";
+            }
+          }
+          
+          if (!this.state.garage.id && this.state.nearbyGarages && this.state.nearbyGarages.length > 0) {
+            this.state.garage.id = this.state.nearbyGarages[0].id;
+            this.state.garage.name = this.state.nearbyGarages[0].name;
+            this.state.garage.address = this.state.nearbyGarages[0].address;
+          }
+          
+          if (!this.state.appointment.date) {
+            // Utiliser le lendemain comme date par défaut
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            this.state.appointment.date = tomorrow.toLocaleDateString('fr-FR');
+          }
+          
+          if (!this.state.appointment.time) {
+            this.state.appointment.time = "14:00";
+          }
+        }
+        
+        this.state.finalConfirmation = true;
+        this.state.advanceStep();
+        
+        return {
+          success: true,
+          botResponse: `Votre rendez-vous est confirmé pour le ${this.state.appointment.date} à ${this.state.appointment.time}. Merci de votre confiance !`,
+        };
+      }
+      
+      // Générer une réponse basée sur l'état actuel
+      const prompt = await this.constructPrompt("continuation");
+      let botResponse = await this.llm.call(prompt);
+      
+      // Si la réponse est trop générique, fournir une réponse plus spécifique
+      if (botResponse.includes("Je traite votre demande") || 
+          botResponse.length < 20 || 
+          botResponse.includes("un instant")) {
+        
+        switch (this.state.currentStep) {
+          case CONVERSATION_STEPS.VEHICLE_IDENTIFICATION:
+            botResponse = "Pouvez-vous me donner votre plaque d'immatriculation pour commencer ?";
+            break;
+          case CONVERSATION_STEPS.SERVICE_SELECTION:
+            botResponse = "Quel type de service souhaitez-vous pour votre véhicule ?";
+            break;
+          case CONVERSATION_STEPS.GARAGE_SELECTION:
+            botResponse = "Quel garage préférez-vous parmi les options disponibles ?";
+            break;
+          case CONVERSATION_STEPS.TIME_SLOT_SELECTION:
+            botResponse = "Quand souhaitez-vous prendre rendez-vous ?";
+            break;
+          case CONVERSATION_STEPS.CONFIRMATION:
+            botResponse = "Confirmez-vous ce rendez-vous ?";
+            break;
+          default:
+            botResponse = "Comment puis-je vous aider aujourd'hui ?";
+        }
+      }
+      
       return {
         success: true,
-        botResponse: "Désolé, je n'ai pas pu accéder aux informations de votre véhicule dans notre système. Pourriez-vous vérifier votre plaque d'immatriculation et la saisir à nouveau au format AA-123-AA ?"
+        botResponse: botResponse
+      };
+    } catch (error) {
+      console.error("Error processing continuation message:", error);
+      return {
+        success: false,
+        botResponse: "Une erreur est survenue. Comment puis-je vous aider avec votre véhicule ?"
       };
     }
   }
 
-  /**
-   * Handle service selection step
-   * @param {string} message - User message
-   * @returns {Promise<{success: boolean, botResponse: string, isLoading?: boolean}>} Bot response
-   */
-  async handleServiceSelectionStep(message) {
-    // Check for confirmation of vehicle
-    if (/\b(oui|correct|exact|confirme|bon|bonne|d'accord|c'est ça|bien|ok)\b/i.test(message)) {
-      this.state.vehicle.confirmed = true;
+  // Ajouter les méthodes de gestion des étapes
+  async handleVehicleIdentificationStep(message) {
+    const prompt = await this.constructPrompt(message);
+    const botResponse = await this.model.call(prompt);
+    
+    // Si le traitement de plaque d'immatriculation a été effectué
+    // et nous sommes encore dans cette étape, faire progresser manuellement
+    if (this.state.vehicle.licensePlate && this.state.vehicle.confirmed) {
       this.state.advanceStep();
       
-      // Signal we're getting services with a more conversational message
       return {
         success: true,
-        botResponse: "Parfait ! Maintenant que votre véhicule est identifié, je recherche les services disponibles dans nos garages. Un instant s'il vous plaît...",
-        isLoading: true
+        botResponse: `Véhicule ${this.state.vehicle.licensePlate} identifié. Quel service souhaitez-vous ?`,
+        isLoading: false
       };
     }
     
-    // If the user wants to change the vehicle
-    if (/\b(non|incorrect|faux|mauvais|erreur|changer|pas bon|pas correct)\b/i.test(message)) {
-      this.state.vehicle.licensePlate = null;
-      this.state.vehicle.brand = null;
-      this.state.vehicle.model = null;
-      
-      return {
-        success: true,
-        botResponse: "Je comprends. Pourriez-vous me fournir à nouveau votre plaque d'immatriculation au format AA-123-AA pour que je puisse identifier correctement votre véhicule ?"
-      };
-    }
-    
-    // Default response using LLM
-    const prompt = await this.buildSystemPrompt(message);
+    return {
+      success: true,
+      botResponse: botResponse
+    };
+  }
+  
+  async handleServiceSelectionStep(message) {
+    const prompt = await this.constructPrompt(message);
     const botResponse = await this.model.call(prompt);
     
-    return { success: true, botResponse };
+    return {
+      success: true,
+      botResponse: botResponse
+    };
   }
-
-  /**
-   * Handle response after service data lookup
-   * @returns {Promise<{success: boolean, botResponse: string}>} Bot response
-   */
-  async handleServiceDataResponse() {
-    try {
-      // Get services from API
-      const services = this.apiAvailable
-        ? await apiService.getOperations()
-        : [
-            { id: '1', name: 'Vidange', price: '80€' },
-            { id: '7', name: 'Changement de pneus', price: '70€ par pneu' },
-            { id: '8', name: 'Contrôle technique', price: '89€' },
-            { id: '5', name: 'Réparation des freins', price: '120€' },
-            { id: '6', name: 'Entretien climatisation', price: '60€' }
-          ];
-      
-      // Format services for display - limit to 5 most common
-      const topServices = services.slice(0, 5);
-      const servicesText = topServices.map(s => `- ${s.name} (${s.price || 'prix sur devis'})`)
-        .join('\n');
-      
-      // Craft a more engaging response
-      return {
-        success: true,
-        botResponse: `Voici les services les plus populaires pour votre ${this.state.vehicle.brand} ${this.state.vehicle.model} :\n${servicesText}\n\nQuel service vous intéresse aujourd'hui ?`
-      };
-    } catch (error) {
-      console.error("Error retrieving service data:", error);
-      return {
-        success: true,
-        botResponse: "Je suis désolé, je n'ai pas pu récupérer la liste complète des services. Nous proposons notamment la vidange (80€), le changement de pneus (70€/pneu), le contrôle technique (89€), les freins (120€) et la climatisation (60€). Quel entretien souhaitez-vous pour votre véhicule ?"
-      };
-    }
-  }
-
-  /**
-   * Handle garage selection step
-   * @param {string} message - User message
-   * @returns {Promise<{success: boolean, botResponse: string, isLoading?: boolean}>} Bot response
-   */
+  
   async handleGarageSelectionStep(message) {
-    // Try to identify service from message
-    if (!this.state.service.id) {
-      // Simple service detection logic
-      if (/\bvidange\b/i.test(message)) {
-        this.state.service.id = '1';
-        this.state.service.name = 'Vidange';
-        this.state.service.price = '80€';
-      } else if (/\bpneus?\b/i.test(message)) {
-        this.state.service.id = '7';
-        this.state.service.name = 'Changement de pneus';
-        this.state.service.price = '70€ par pneu';
-      } else if (/\b(contrôle|controle)(\s+technique)?\b/i.test(message)) {
-        this.state.service.id = '8';
-        this.state.service.name = 'Contrôle technique';
-        this.state.service.price = '89€';
-      } else if (/\bfreins?\b/i.test(message)) {
-        this.state.service.id = '5';
-        this.state.service.name = 'Réparation des freins';
-        this.state.service.price = '120€';
-      } else if (/\bclimatisation\b/i.test(message)) {
-        this.state.service.id = '6';
-        this.state.service.name = 'Entretien climatisation';
-        this.state.service.price = '60€';
-      }
-    }
+    // Chercher un nom de garage dans le message
+    const lowerMessage = message.toLowerCase();
     
-    // If service identified, look for confirmation
-    if (this.state.service.id) {
-      if (/\b(oui|correct|exact|confirme|bon|bonne|d'accord)\b/i.test(message)) {
-        this.state.service.confirmed = true;
-        this.state.advanceStep();
-        return {
-          success: true,
-          botResponse: "Je recherche les garages les plus proches de vous...",
-          isLoading: true
-        };
-      }
-    } else {
-      // Service not identified yet, use LLM to respond
-      const prompt = await this.buildSystemPrompt(message);
-      const botResponse = await this.model.call(prompt);
-      return { success: true, botResponse };
-    }
-    
-    // Default response - confirm service selection
-    return {
-      success: true,
-      botResponse: `Vous avez sélectionné : ${this.state.service.name} (${this.state.service.price}). Est-ce correct ?`
-    };
-  }
-
-  /**
-   * Handle response after garage data lookup
-   * @returns {Promise<{success: boolean, botResponse: string}>} Bot response
-   */
-  async handleGarageDataResponse() {
-    try {
-      // Get garages from API
-      const garages = this.apiAvailable
-        ? await apiService.getAllGarages()
-        : [
-            { id: '1', name: 'Paris', address: '23 Avenue de la République, 75011 Paris' },
-            { id: '4', name: 'Lyon', address: '6 Rue Joannès Carret, 69009 Lyon' },
-            { id: '6', name: 'Nice', address: '116 Avenue Simone Veil, 06200 Nice' }
-          ];
-      
-      // Format garages for display (limit to 3)
-      const garagesToShow = garages.slice(0, 3);
-      const garagesText = garagesToShow
-        .map(g => `- ${g.name} (${g.address})`)
-        .join('\n');
-      
-      return {
-        success: true,
-        botResponse: `Voici nos garages disponibles :\n${garagesText}\n\nQuel garage préférez-vous pour votre ${this.state.service.name} ?`
-      };
-    } catch (error) {
-      console.error("Error retrieving garage data:", error);
-      return {
-        success: true,
-        botResponse: "Je suis désolé, je n'ai pas pu récupérer la liste des garages. Souhaitez-vous prendre rendez-vous à Lyon, Nice ou Paris ?"
-      };
-    }
-  }
-
-  /**
-   * Handle time slot selection step
-   * @param {string} message - User message
-   * @returns {Promise<{success: boolean, botResponse: string, isLoading?: boolean}>} Bot response
-   */
-  async handleTimeSlotSelectionStep(message) {
-    // Try to identify garage from message
-    if (!this.state.garage.id) {
-      if (/\bparis\b/i.test(message)) {
-        this.state.garage.id = '1';
-        this.state.garage.name = 'Paris';
-      } else if (/\blyon\b/i.test(message)) {
-        this.state.garage.id = '4';
-        this.state.garage.name = 'Lyon';
-      } else if (/\bnice\b/i.test(message)) {
-        this.state.garage.id = '6';
-        this.state.garage.name = 'Nice';
-      }
-    }
-    
-    // If garage identified, look for confirmation
-    if (this.state.garage.id) {
-      if (/\b(oui|correct|exact|confirme|bon|bonne|d'accord)\b/i.test(message)) {
-        this.state.garage.confirmed = true;
-        this.state.advanceStep();
-        return {
-          success: true,
-          botResponse: "Je consulte les créneaux disponibles...",
-          isLoading: true
-        };
-      }
-    } else {
-      // Garage not identified yet, use LLM to respond
-      const prompt = await this.buildSystemPrompt(message);
-      const botResponse = await this.model.call(prompt);
-      return { success: true, botResponse };
-    }
-    
-    // Default response - confirm garage selection
-    return {
-      success: true,
-      botResponse: `Vous avez choisi le garage de ${this.state.garage.name}. Est-ce correct ?`
-    };
-  }
-
-  /**
-   * Handle response after time slot data lookup
-   * @returns {Promise<{success: boolean, botResponse: string}>} Bot response
-   */
-  async handleTimeSlotDataResponse() {
-    try {
-      // Default date (next Monday)
-      const today = new Date();
-      const nextMonday = new Date(today.setDate(today.getDate() + (1 + 7 - today.getDay()) % 7));
-      const dateStr = nextMonday.toISOString().split('T')[0];
-      
-      // Get time slots from API
-      const slots = this.apiAvailable
-        ? await apiService.getAvailableTimeSlots(this.state.garage.id, this.state.service.id, dateStr)
-        : [
-            { date: dateStr, time: '09:00', available: true },
-            { date: dateStr, time: '10:30', available: true },
-            { date: dateStr, time: '14:00', available: true },
-            { date: dateStr, time: '16:30', available: true }
-          ];
-      
-      // Format date for display (French format)
-      const displayDate = new Date(dateStr)
-        .toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
-      
-      // Filter available slots
-      const availableSlots = slots.filter(slot => slot.available);
-      
-      if (availableSlots.length === 0) {
-        return {
-          success: true,
-          botResponse: `Désolé, aucun créneau n'est disponible le ${displayDate}. Souhaitez-vous essayer un autre jour ?`
-        };
-      }
-      
-      // Format slots for display
-      const slotsText = availableSlots
-        .map(slot => `- ${slot.time}`)
-        .join('\n');
-      
-      return {
-        success: true,
-        botResponse: `Voici les créneaux disponibles le ${displayDate} au garage de ${this.state.garage.name} :\n${slotsText}\n\nQuelle heure vous conviendrait ?`
-      };
-    } catch (error) {
-      console.error("Error retrieving time slot data:", error);
-      return {
-        success: true,
-        botResponse: "Je suis désolé, je n'ai pas pu récupérer les créneaux disponibles. À quelle date et heure souhaiteriez-vous prendre rendez-vous ?"
-      };
-    }
-  }
-
-  /**
-   * Handle confirmation step
-   * @param {string} message - User message
-   * @returns {Promise<{success: boolean, botResponse: string}>} Bot response
-   */
-  async handleConfirmationStep(message) {
-    // Try to identify date/time from message
-    if (!this.state.appointment.time) {
-      // Simple time detection logic
-      const timeRegex = /\b(\d{1,2})[h:](\d{0,2})\b/i;
-      const timeMatch = message.match(timeRegex);
-      
-      if (timeMatch) {
-        const hours = timeMatch[1];
-        const minutes = timeMatch[2] || '00';
-        this.state.appointment.time = `${hours}h${minutes}`;
-        
-        // Set default date if not already set (next Monday)
-        if (!this.state.appointment.date) {
-          const today = new Date();
-          const nextMonday = new Date(today.setDate(today.getDate() + (1 + 7 - today.getDay()) % 7));
-          this.state.appointment.date = nextMonday.toLocaleDateString('fr-FR', { 
-            weekday: 'long', 
-            day: 'numeric', 
-            month: 'long',
-            year: 'numeric'
-          });
+    // Vérifier si l'un des noms de garage est mentionné
+    if (this.state.availableGarages && this.state.availableGarages.length > 0) {
+      for (const garage of this.state.availableGarages) {
+        if (garage.name && lowerMessage.includes(garage.name.toLowerCase())) {
+          this.state.garage.id = garage.id;
+          this.state.garage.name = garage.name;
+          this.state.garage.address = garage.address;
+          this.state.garage.confirmed = true;
+          this.state.advanceStep();
+          
+          console.log(`[DEBUG] Garage "${garage.name}" détecté et sélectionné, étape: ${this.state.currentStep}`);
+          
+          return {
+            success: true,
+            botResponse: `Garage ${garage.name} sélectionné. Quand souhaitez-vous prendre rendez-vous ?`,
+            isLoading: false
+          };
         }
       }
     }
     
-    // If time identified, look for confirmation
-    if (this.state.appointment.time) {
-      if (/\b(oui|correct|exact|confirme|bon|bonne|d'accord)\b/i.test(message)) {
+    // Vérifier les noms de ville communs qui pourraient être une demande de garage
+    const cityNames = ["paris", "lyon", "marseille", "toulouse", "bordeaux", "lille", "strasbourg", "nantes"];
+    
+    for (const city of cityNames) {
+      if (lowerMessage.includes(city)) {
+        // Sélectionner le premier garage disponible par défaut
+        if (this.state.availableGarages && this.state.availableGarages.length > 0) {
+          const garage = this.state.availableGarages[0];
+          this.state.garage.id = garage.id;
+          this.state.garage.name = garage.name;
+          this.state.garage.address = garage.address;
+          this.state.garage.confirmed = true;
+          this.state.advanceStep();
+          
+          console.log(`[DEBUG] Ville "${city}" détectée, garage "${garage.name}" sélectionné, étape: ${this.state.currentStep}`);
+          
+          return {
+            success: true,
+            botResponse: `Garage ${garage.name} sélectionné pour ${city}. Quand souhaitez-vous prendre rendez-vous ?`,
+            isLoading: false
+          };
+        }
+      }
+    }
+    
+    const prompt = await this.constructPrompt(message);
+    const botResponse = await this.model.call(prompt);
+    
+    return {
+      success: true,
+      botResponse: botResponse
+    };
+  }
+  
+  async handleTimeSlotSelectionStep(message) {
+    // Vérifier si le message contient des mentions de dates/heures
+    const lowerMessage = message.toLowerCase();
+    
+    // Rechercher des mentions de dates/heures
+    const dateTimeRegex = /(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|demain|aujourd['']hui|[\d]{1,2}\/[\d]{1,2})\b.*?(\d{1,2}[h:]\d{0,2}|\d{1,2}\s*h)/i;
+    const timeMatch = message.match(dateTimeRegex);
+    
+    if (timeMatch) {
+      const fullDateTime = timeMatch[0];
+      // Extraire date et heure
+      const dateMatch = /(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|demain|aujourd['']hui|[\d]{1,2}\/[\d]{1,2})/i.exec(fullDateTime);
+      const timeRegex = /(\d{1,2})[h:](\d{0,2})/i;
+      const timeOnlyMatch = fullDateTime.match(timeRegex);
+      
+      if (dateMatch && timeOnlyMatch) {
+        this.state.appointment.date = dateMatch[0];
+        this.state.appointment.time = `${timeOnlyMatch[1]}:${timeOnlyMatch[2] || '00'}`;
         this.state.appointment.confirmed = true;
         this.state.advanceStep();
         
-        // Generate booking summary
-        const summary = this.state.generateSummary();
+        console.log(`[DEBUG] Date/heure détectée: ${this.state.appointment.date} à ${this.state.appointment.time}, étape: ${this.state.currentStep}`);
         
-    return {
-      success: true,
-          botResponse: `${summary}\nVeuillez confirmer ce rendez-vous en répondant par "oui" ou "non".`
+        return {
+          success: true,
+          botResponse: `Rendez-vous prévu le ${this.state.appointment.date} à ${this.state.appointment.time}. Confirmez-vous ce rendez-vous ?`,
         };
       }
-    } else {
-      // Time not identified yet, use LLM to respond
-      const prompt = await this.buildSystemPrompt(message);
-      const botResponse = await this.model.call(prompt);
-      return { success: true, botResponse };
     }
     
-    // Default response - confirm time selection
-    return {
-      success: true,
-      botResponse: `Vous avez choisi le créneau de ${this.state.appointment.time}${this.state.appointment.date ? ` le ${this.state.appointment.date}` : ''}. Est-ce correct ?`
-    };
-  }
-
-  /**
-   * Handle final confirmation and appointment booking
-   * @param {string} message - User message
-   * @returns {Promise<{success: boolean, botResponse: string}>} Bot response
-   */
-  async handleCompletedStep(message) {
-    // Check for confirmation
-    if (/\b(oui|correct|exact|confirme|d'accord)\b/i.test(message)) {
-      // Attempt to book appointment
-        const appointmentData = {
-        service_id: this.state.service.id,
-        garage_id: this.state.garage.id,
-        datetime: this.formatDateTimeForApi(),
-        license_plate: this.state.vehicle.licensePlate,
-          vehicle_info: {
-          brand: this.state.vehicle.brand,
-          model: this.state.vehicle.model
+    // Détection simplifiée des horaires communs
+    const commonTimes = [
+      { keyword: "matin", time: "10:00" },
+      { keyword: "midi", time: "12:00" },
+      { keyword: "après-midi", time: "14:00" },
+      { keyword: "soir", time: "17:00" },
+      { keyword: "demain", time: "10:00", date: "demain" },
+      { keyword: "lundi", time: "10:00", date: "lundi" },
+      { keyword: "mardi", time: "10:00", date: "mardi" },
+      { keyword: "mercredi", time: "10:00", date: "mercredi" },
+      { keyword: "jeudi", time: "10:00", date: "jeudi" },
+      { keyword: "vendredi", time: "10:00", date: "vendredi" }
+    ];
+    
+    for (const timeOption of commonTimes) {
+      if (lowerMessage.includes(timeOption.keyword)) {
+        this.state.appointment.time = timeOption.time;
+        
+        if (timeOption.date) {
+          this.state.appointment.date = timeOption.date;
+        } else if (!this.state.appointment.date) {
+          this.state.appointment.date = "demain";
         }
-      };
-      
-      const success = this.apiAvailable 
-        ? await apiService.bookAppointment(appointmentData)
-        : true;
-      
-      if (success) {
-        const confirmMessage = `Super ! Votre rendez-vous est confirmé pour une ${this.state.service.name} de votre ${this.state.vehicle.brand} ${this.state.vehicle.model}, le ${this.state.appointment.date} à ${this.state.appointment.time} au garage de ${this.state.garage.name}. Merci de votre confiance !`;
         
-        // Reset state for a new conversation
-        this.reset();
+        this.state.appointment.confirmed = true;
+        this.state.advanceStep();
         
-        return { success: true, botResponse: confirmMessage };
-      } else {
-        return { 
-          success: true, 
-          botResponse: "Je suis désolé, je n'ai pas pu confirmer votre rendez-vous. Souhaitez-vous essayer à nouveau ou choisir un autre créneau ?"
+        console.log(`[DEBUG] Horaire commun détecté via "${timeOption.keyword}": ${this.state.appointment.date} à ${this.state.appointment.time}, étape: ${this.state.currentStep}`);
+        
+        return {
+          success: true,
+          botResponse: `Rendez-vous prévu le ${this.state.appointment.date} à ${this.state.appointment.time}. Confirmez-vous ce rendez-vous ?`,
         };
       }
-    } else if (/\b(non|incorrect|faux|mauvais|erreur|annul|changer)\b/i.test(message)) {
-      // Go back to service selection to start over
-      this.state.goToStep(CONVERSATION_STEPS.SERVICE_SELECTION);
-      return {
-        success: true,
-        botResponse: "D'accord, reprenons. Quel service souhaitez-vous pour votre véhicule ?"
-      };
     }
     
-    // Default response using LLM
-    const prompt = await this.buildSystemPrompt(message);
+    const prompt = await this.constructPrompt(message);
     const botResponse = await this.model.call(prompt);
     
-    return { success: true, botResponse };
+    return {
+      success: true,
+      botResponse: botResponse
+    };
   }
-
-  /**
-   * Build the system prompt with current conversation state
-   * @param {string} userInput - User message
-   * @returns {Promise<string>} Complete system prompt
-   */
-  async buildSystemPrompt(userInput) {
-    try {
-      // Get chat history
-      const memoryVariables = await this.memory.loadMemoryVariables({});
-      let chatHistory = "";
+  
+  async handleConfirmationStep(message) {
+    // Rechercher une confirmation
+    const confirmRegex = /(oui|confirme|d['']accord|ok|bien sûr|valide|parfait|très bien|je confirme|tout à fait)/i;
+    const confirmMatch = message.match(confirmRegex);
+    
+    if (confirmMatch) {
+      this.state.finalConfirmation = true;
+      this.state.advanceStep();
       
-      if (memoryVariables && memoryVariables.chat_history) {
-        if (typeof memoryVariables.chat_history === 'string') {
-          chatHistory = memoryVariables.chat_history;
-        } else if (typeof memoryVariables.chat_history.then === 'function') {
-          chatHistory = await memoryVariables.chat_history;
+      console.log(`[DEBUG] Confirmation détectée via "${confirmMatch[0]}", étape: ${this.state.currentStep}`);
+      
+      return {
+        success: true,
+        botResponse: `Votre rendez-vous est confirmé pour le ${this.state.appointment.date || 'jour convenu'} à ${this.state.appointment.time || 'l\'heure convenue'}. Merci de votre confiance !`,
+      };
+    }
+    
+    const prompt = await this.constructPrompt(message);
+    const botResponse = await this.model.call(prompt);
+    
+    return {
+      success: true,
+      botResponse: botResponse
+    };
+  }
+  
+  async handleCompletedStep(message) {
+    // Rechercher une demande de nouveau rendez-vous
+    const newAppointmentRegex = /(nouveau|autre|different|encore|refaire)/i;
+    const newMatch = message.match(newAppointmentRegex);
+    
+    if (newMatch) {
+      this.state.reset();
+      return {
+        success: true,
+        botResponse: "Très bien, pour un nouveau rendez-vous, pouvez-vous me donner votre plaque d'immatriculation ?"
+      };
+    }
+    
+    const prompt = await this.constructPrompt(message);
+    const botResponse = await this.model.call(prompt);
+    
+    return {
+      success: true,
+      botResponse: botResponse
+    };
+  }
+  
+  async constructPrompt(message) {
+    try {
+      // Construire le contexte pour le prompt
+      let vehicleData = "Non disponible";
+      if (this.state.vehicle.licensePlate) {
+        if (this.state.vehicle.brand && this.state.vehicle.model) {
+          vehicleData = `Plaque: ${this.state.vehicle.licensePlate}, Marque: ${this.state.vehicle.brand}, Modèle: ${this.state.vehicle.model}`;
         } else {
-          chatHistory = JSON.stringify(memoryVariables.chat_history);
+          vehicleData = `Plaque: ${this.state.vehicle.licensePlate}`;
         }
       }
       
-      // Prepare data for prompt placeholders
-      let vehicleData = "Information véhicule non disponible";
-      if (this.state.vehicle.brand && this.state.vehicle.model) {
-        vehicleData = `${this.state.vehicle.brand} ${this.state.vehicle.model} (immatriculation: ${this.state.vehicle.licensePlate})`;
-      } else if (this.state.vehicle.licensePlate) {
-        vehicleData = `Immatriculation: ${this.state.vehicle.licensePlate}, informations détaillées en attente`;
+      let availableServices = "Non disponible";
+      if (this.state.availableServices && this.state.availableServices.length > 0) {
+        availableServices = this.state.availableServices
+          .slice(0, 5)
+          .map(s => `${s.name} (${s.price || 'prix non disponible'})`)
+          .join(", ");
       }
       
-      // Format available services
-      const servicesData = Object.values(DEFAULT_SERVICES)
-        .map(service => `${service.name} (${service.price}) - ${service.description}`)
-        .join('\n');
-      
-      // Format garages
-      const garagesData = DEFAULT_GARAGES
-        .map(garage => `${garage.name} (${garage.address})`)
-        .join('\n');
-      
-      // Format time slots (mock for now)
-      const timeSlots = [
-        "Lundi: 9h00, 11h00, 14h00, 16h00",
-        "Mardi: 9h00, 11h00, 14h00, 16h00",
-        "Mercredi: 9h00, 11h00, 14h00, 16h00"
-      ].join('\n');
-      
-      // Add current step information to help guide the model's focus
-      let currentStepInfo = "";
-      switch(this.state.currentStep) {
-        case CONVERSATION_STEPS.VEHICLE_IDENTIFICATION:
-          currentStepInfo = `ÉTAPE ACTUELLE: IDENTIFICATION DU VÉHICULE
-          - Vous êtes à la première étape du processus de réservation
-          - Objectif: obtenir et confirmer la plaque d'immatriculation du véhicule
-          - Si la plaque est déjà fournie: ${this.state.vehicle.licensePlate || "non fournie"}
-          - Prochaine étape: sélection du service après confirmation du véhicule`;
-          break;
-        case CONVERSATION_STEPS.SERVICE_SELECTION:
-          currentStepInfo = `ÉTAPE ACTUELLE: SÉLECTION DU SERVICE
-          - Vous êtes à la deuxième étape du processus de réservation
-          - Le véhicule a été identifié: ${vehicleData}
-          - Objectif: aider l'utilisateur à choisir un service approprié
-          - Service actuellement sélectionné: ${this.state.service.name || "aucun"}
-          - Prochaine étape: choix du garage après confirmation du service`;
-          break;
-        case CONVERSATION_STEPS.GARAGE_SELECTION:
-          currentStepInfo = `ÉTAPE ACTUELLE: SÉLECTION DU GARAGE
-          - Vous êtes à la troisième étape du processus de réservation
-          - Véhicule identifié: ${vehicleData}
-          - Service sélectionné: ${this.state.service.name || "à déterminer"}
-          - Objectif: aider l'utilisateur à choisir un garage
-          - Garage actuellement sélectionné: ${this.state.garage.name || "aucun"}
-          - Prochaine étape: choix du créneau horaire après confirmation du garage`;
-          break;
-        case CONVERSATION_STEPS.TIME_SLOT_SELECTION:
-          currentStepInfo = `ÉTAPE ACTUELLE: SÉLECTION DU CRÉNEAU HORAIRE
-          - Vous êtes à la quatrième étape du processus de réservation
-          - Véhicule identifié: ${vehicleData}
-          - Service sélectionné: ${this.state.service.name}
-          - Garage sélectionné: ${this.state.garage.name}
-          - Objectif: aider l'utilisateur à choisir une date et heure de rendez-vous
-          - Créneau actuellement sélectionné: ${this.state.appointment.date ? `${this.state.appointment.date} à ${this.state.appointment.time}` : "aucun"}
-          - Prochaine étape: confirmation finale après choix du créneau`;
-          break;
-        case CONVERSATION_STEPS.CONFIRMATION:
-          currentStepInfo = `ÉTAPE ACTUELLE: CONFIRMATION FINALE
-          - Vous êtes à la dernière étape du processus de réservation
-          - Objectif: obtenir la confirmation finale de l'utilisateur pour valider le rendez-vous
-          - Résumé complet à présenter à l'utilisateur
-          - Après confirmation: remercier l'utilisateur et fournir un numéro de référence`;
-          break;
+      let nearbyGarages = "Non disponible";
+      if (this.state.availableGarages && this.state.availableGarages.length > 0) {
+        nearbyGarages = this.state.availableGarages
+          .slice(0, 5)
+          .map(g => g.name)
+          .join(", ");
       }
       
-      // Replace placeholder values in the system prompt
-      let prompt = SYSTEM_TEMPLATE
+      let availableSlots = "Lundi 10h, Mardi 14h, Mercredi 16h";
+      
+      // Récupérer l'historique de conversation
+      const history = await this.memory.loadMemoryVariables({});
+      let chatHistory = "";
+      if (history && history.chat_history) {
+        chatHistory = history.chat_history;
+      }
+      
+      // Remplacer les placeholders dans le template système
+      let systemPrompt = SYSTEM_TEMPLATE
         .replace("{{VEHICLE_DATA}}", vehicleData)
-        .replace("{{AVAILABLE_SERVICES}}", servicesData)
-        .replace("{{NEARBY_GARAGES}}", garagesData)
-        .replace("{{AVAILABLE_SLOTS}}", timeSlots)
+        .replace("{{AVAILABLE_SERVICES}}", availableServices)
+        .replace("{{NEARBY_GARAGES}}", nearbyGarages)
+        .replace("{{AVAILABLE_SLOTS}}", availableSlots)
         .replace("{{CHAT_HISTORY}}", chatHistory)
-        .replace("{{USER_INPUT}}", userInput);
+        .replace("{{USER_INPUT}}", message);
       
-      // Add the current step information to the prompt
-      prompt = prompt.replace("# CONVERSATION HISTORY", `# CURRENT STEP FOCUS\n${currentStepInfo}\n\n# CONVERSATION HISTORY`);
-      
-      return prompt;
+      return systemPrompt;
     } catch (error) {
-      console.error("Error building prompt:", error);
-      // Fallback prompt
-      return `Tu es un assistant de garage automobile nommé BOB. Réponds en français à cette demande: ${userInput}`;
+      console.error("Error constructing prompt:", error);
+      return SYSTEM_TEMPLATE.replace("{{USER_INPUT}}", message);
     }
   }
-
-  /**
-   * Format date and time for API
-   * @returns {string} Formatted date and time
-   */
-  formatDateTimeForApi() {
+  
+  async saveToMemory(userInput, botOutput) {
     try {
-      // Extract date components
-      const dateStr = this.state.appointment.date;
-      const timeStr = this.state.appointment.time;
-      
-      // Default to current date + 1 week if date not specified
-      if (!dateStr) {
-        const date = new Date();
-        date.setDate(date.getDate() + 7);
-        return `${date.toISOString().split('T')[0]}T${timeStr.replace('h', ':')}:00`;
-      }
-      
-      // Parse French date format (needs improvement for production)
-      const months = {
-        'janvier': '01', 'février': '02', 'mars': '03', 'avril': '04',
-        'mai': '05', 'juin': '06', 'juillet': '07', 'août': '08',
-        'septembre': '09', 'octobre': '10', 'novembre': '11', 'décembre': '12'
-      };
-      
-      // Very basic parsing - in production, use a proper date parsing library
-      const dateMatch = dateStr.match(/(\d+)\s+(\w+)\s+(\d{4})/);
-      if (!dateMatch) return new Date().toISOString();
-      
-      const day = dateMatch[1].padStart(2, '0');
-      const month = months[dateMatch[2].toLowerCase()] || '01';
-      const year = dateMatch[3];
-      
-      // Parse time
-      const time = timeStr ? timeStr.replace('h', ':') : '10:00';
-      
-      return `${year}-${month}-${day}T${time}:00`;
-    } catch (error) {
-      console.error("Error formatting date for API:", error);
-      return new Date().toISOString();
-    }
-  }
-
-  /**
-   * Save message and response to memory
-   * @param {string} message - User message
-   * @param {string} response - Bot response
-   */
-  async saveToMemory(message, response) {
-    try {
-      await this.memory.saveContext({ input: message }, { output: response });
+      await this.memory.saveContext(
+        { input: userInput },
+        { output: botOutput }
+      );
     } catch (error) {
       console.error("Error saving to memory:", error);
     }
-  }
-
-  /**
-   * Reset the agent
-   */
-  reset() {
-    // Reset state
-    this.state.reset();
-    
-    // Reset memory
-    this.memory = new BufferMemory({
-      memoryKey: "chat_history",
-      returnMessages: true,
-      inputKey: "input", 
-      outputKey: "output",
-      humanPrefix: "User",
-      aiPrefix: "Assistant",
-    });
-    
-    // Reset model
-    this.model = getOllamaModel();
-    
-    // Reset flags
-    this.isProcessing = false;
   }
 }
 
