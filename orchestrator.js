@@ -1,62 +1,47 @@
-const { initializeAgentExecutorWithOptions } = require("langchain/agents");
-const { ConversationChain } = require("langchain/chains");
+/**
+ * Orchestrateur simplifié pour le chatbot
+ * Utilise directement le modèle LLM avec le système de réponse JSON
+ */
 const { BufferMemory } = require("langchain/memory");
-const { PromptTemplate } = require("langchain/prompts");
 const { getOllamaModel } = require("./llm/model");
-const { listServicesTools, getAvailableSlotsTools, bookSlotTools } = require("./tools/garage");
 const { SYSTEM_TEMPLATE } = require("./src/config/constants");
+const ResponseParser = require("./src/utils/responseParser");
+const ChatAgent = require("./src/agents/chatAgent");
+
+// Instance du chatAgent pour l'orchestrateur
+let chatAgent = null;
 
 /**
- * Configuration du système de mémoire pour l'agent
+ * Initialise l'agent de chat si nécessaire
+ * @returns {ChatAgent} Instance de l'agent de chat
  */
-const memory = new BufferMemory({
-  memoryKey: "chat_history",
-  returnMessages: true,
-});
-
-/**
- * Initialisation de l'agent avec ses outils
- */
-const initializeAgent = async () => {
-  const model = getOllamaModel();
-  const tools = [listServicesTools, getAvailableSlotsTools, bookSlotTools];
-  
-  // Créer l'agent exécuteur avec les options
-  const executor = await initializeAgentExecutorWithOptions(
-    tools,
-    model,
-    {
-      agentType: "structured-chat-zero-shot-react-description",
-      verbose: process.env.NODE_ENV === "development",
-      memory: memory,
-      maxIterations: 5,
-      prefix: SYSTEM_TEMPLATE,
-    }
-  );
-  
-  return executor;
+const getAgent = async () => {
+  if (!chatAgent) {
+    chatAgent = new ChatAgent();
+    await chatAgent.initialize();
+    console.log("Agent de chat initialisé par l'orchestrateur");
+  }
+  return chatAgent;
 };
 
 /**
- * Traite un message utilisateur via l'agent
+ * Traite un message utilisateur via l'agent de chat
  * @param {string} message - Message de l'utilisateur
- * @returns {object} Réponse de l'agent
+ * @returns {object} Réponse formatée pour l'interface
  */
 const processMessage = async (message) => {
   try {
-    // Initialiser l'agent
-    const agent = await initializeAgent();
+    // Obtenir l'agent de chat
+    const agent = await getAgent();
     
-    // Exécuter l'agent avec le message utilisateur
-    const result = await agent.call({ input: message });
+    // Traiter le message avec l'agent
+    const result = await agent.processMessage(message);
     
     return {
       success: true,
-      botResponse: result.output,
-      // Information sur l'état du processus pour le frontend
-      processState: {
-        isProcessing: false,
-        currentStep: detectCurrentStep(result.output)
+      botResponse: result.botResponse,
+      processState: result.processState || {
+        currentStep: agent.state.currentStep
       }
     };
   } catch (error) {
@@ -64,42 +49,50 @@ const processMessage = async (message) => {
     return {
       success: false,
       error: "Désolé, je n'ai pas pu traiter votre demande. Veuillez réessayer.",
+      botResponse: "Une erreur est survenue lors du traitement de votre message. Pourriez-vous reformuler votre demande?",
       processState: {
         isProcessing: false,
-        error: true
+        error: true,
+        currentStep: 1
       }
     };
   }
 };
 
 /**
- * Détecte l'étape actuelle du processus de réservation basée sur la réponse
- * @param {string} response - Réponse de l'agent
- * @returns {number} Numéro de l'étape actuelle (1-5) ou 0 si indéterminé
+ * Réinitialise la conversation
+ * @returns {object} Confirmation de réinitialisation
  */
-const detectCurrentStep = (response) => {
-  if (!response) return 0;
-  
-  const lowercaseResponse = response.toLowerCase();
-  
-  // Détection basée sur des mots-clés dans la réponse
-  if (lowercaseResponse.includes("véhicule") && 
-      (lowercaseResponse.includes("marque") || lowercaseResponse.includes("modèle"))) {
-    return 1; // Étape d'identification du véhicule
-  } else if (lowercaseResponse.includes("service") && 
-            (lowercaseResponse.includes("propose") || lowercaseResponse.includes("disponible"))) {
-    return 2; // Étape de sélection du service
-  } else if (lowercaseResponse.includes("garage") && 
-            (lowercaseResponse.includes("proximité") || lowercaseResponse.includes("emplacement"))) {
-    return 3; // Étape de choix du garage
-  } else if (lowercaseResponse.includes("créneau") || 
-            (lowercaseResponse.includes("disponible") && lowercaseResponse.includes("horaire"))) {
-    return 4; // Étape de sélection du créneau
-  } else if (lowercaseResponse.includes("confirme") || lowercaseResponse.includes("réservation confirmée")) {
-    return 5; // Étape de confirmation
+const resetConversation = async () => {
+  try {
+    if (chatAgent) {
+      chatAgent.state.reset();
+      console.log("Conversation réinitialisée");
+    } else {
+      // Initialiser un nouvel agent si aucun n'existe
+      await getAgent();
+    }
+    
+    return {
+      success: true,
+      botResponse: "Bonjour ! Je suis BOB, votre assistant de réservation auto. Comment puis-je vous aider aujourd'hui?",
+      processState: {
+        currentStep: 1
+      }
+    };
+  } catch (error) {
+    console.error("Erreur lors de la réinitialisation:", error);
+    return {
+      success: false,
+      error: "Désolé, je n'ai pas pu réinitialiser la conversation.",
+      processState: {
+        error: true
+      }
+    };
   }
-  
-  return 0; // Indéterminé
 };
 
-module.exports = { processMessage }; 
+module.exports = { 
+  processMessage,
+  resetConversation
+}; 

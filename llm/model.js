@@ -1,20 +1,35 @@
 const { ChatOllama } = require("langchain/chat_models/ollama");
-const dotenv = require("dotenv");
+require('dotenv').config();
 
-dotenv.config();
+/**
+ * Configuration et initialisation du modèle LLM (Ollama)
+ */
+/**
+ * Obtient une instance du modèle Ollama configurée
+ * @returns {ChatOllama} Instance du modèle Ollama
+ */
+function getOllamaModel() {
+  // Vérifier l'environnement pour les paramètres du modèle
+  const modelName = process.env.OLLAMA_MODEL || "mistral";
+  const baseUrl = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
+  const temperature = parseFloat(process.env.LLM_TEMPERATURE || "0.1");
+  const timeout = parseInt(process.env.LLM_TIMEOUT || "180000");
+  const contextSize = parseInt(process.env.OLLAMA_CONTEXT_SIZE || "8192");
 
-const getOllamaModel = () => {
-  return new ChatOllama({
-    baseUrl: process.env.OLLAMA_BASE_URL || "http://localhost:11434",
-    model: process.env.OLLAMA_MODEL || "mistral",
-    temperature: 0.5,
-    retry: true,
-    maxRetries: 3,
-    timeout: 120000,
-    topP: 0.95,
-    cache: true,
-    systemMessage: "Tu es BOB, l'assistant virtuel Auto Service Pro. Réponds de façon concise, professionnelle mais amicale."
+  // Créer et configurer le modèle
+  const model = new ChatOllama({
+    baseUrl: baseUrl,
+    model: modelName,
+    temperature: temperature,
+    timeout: timeout,
+    context: contextSize,
+    format: "json"
   });
-};
 
-module.exports = { getOllamaModel };
+  console.log(`Modèle LLM initialisé: ${modelName} (température: ${temperature}, contexte: ${contextSize}, format: json)`);
+  return model;
+}
+
+module.exports = {
+  getOllamaModel,
+};
