@@ -135,6 +135,8 @@ class ResponseParser {
         slotTime: null,
         slotValidated: false,
         finalConfirmed: false,
+        appointmentCreated: false,
+        appointmentId: null,
         ...parsed.extractedData
       }
     };
@@ -287,7 +289,9 @@ class ResponseParser {
         slotDate: response.extractedData?.slotDate || null,
         slotTime: response.extractedData?.slotTime || null,
         slotValidated: !!response.extractedData?.slotValidated,
-        finalConfirmed: !!response.extractedData?.finalConfirmed
+        finalConfirmed: !!response.extractedData?.finalConfirmed,
+        appointmentCreated: !!response.extractedData?.appointmentCreated,
+        appointmentId: response.extractedData?.appointmentId || null
       }
     };
 

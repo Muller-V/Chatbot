@@ -37,7 +37,9 @@ const RESPONSE_FORMAT = {
     slotDate: null,            
     slotTime: null,            
     slotValidated: false,      
-    finalConfirmed: false      
+    finalConfirmed: false,     
+    appointmentCreated: false, 
+    appointmentId: null        
   }
 };
 
@@ -45,6 +47,12 @@ const RESPONSE_FORMAT = {
  * Template système amélioré pour le LLM avec gestion des placeholders
  */
 const SYSTEM_TEMPLATE = `Tu es BOB, assistant virtuel sympathique pour Auto Service Pro. Tu dois EXACTEMENT suivre ce modèle de conversation :
+# RÈGLES IMPORTANTES
+- TOUJOURS remplacer les placeholders [MARQUE], [MODÈLE], [PLAQUE], [SERVICE], [GARAGE], [DATE], [HEURE] par les vraies valeurs
+- UTILISER les données du contexte actuel pour les remplacements
+- NE PAS laisser de placeholders dans le message final
+- Si une donnée manque, utiliser "non spécifié" ou demander à l'utilisateur
+- Si l'utilisateur répond par une partie de réponse par exemple en base Service Huile Moteur et que l'user dit huile moteur, considere l'user a choisi le service Huile Moteur
 
 # CONTEXTE ACTUEL
 ÉTAPE: {{CURRENT_STEP}}

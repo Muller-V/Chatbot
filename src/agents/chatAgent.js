@@ -184,7 +184,7 @@ class ChatAgent {
       console.log("=======================");
 
       // Mettre à jour l'état de la conversation
-      this.updateConversationState(parsedResponse, message);
+      await this.updateConversationState(parsedResponse, message);
 
       // Sauvegarder dans la mémoire
       await this.saveToMemory(message, parsedResponse.message);
@@ -317,7 +317,7 @@ class ChatAgent {
   /**
    * Met à jour l'état de la conversation basé sur la réponse du LLM et le message utilisateur
    */
-  updateConversationState(parsedResponse, userMessage) {
+  async updateConversationState(parsedResponse, userMessage) {
     const extractedData = parsedResponse.extractedData;
     const messageLower = userMessage.toLowerCase();
     
@@ -469,7 +469,37 @@ class ChatAgent {
         if (this.isConfirmation(messageLower) || extractedData.finalConfirmed) {
           this.state.appointment.finalConfirmed = true;
           console.log("Rendez-vous confirmé");
-          this.createAppointment();
+          
+          // Tenter de créer le rendez-vous via l'API
+          const appointmentResult = await this.createAppointment();
+          
+          // Adapter le message selon le résultat de la création
+          if (appointmentResult && this.state.appointment.created) {
+            // Succès de la création
+            console.log("Rendez-vous créé avec succès, mise à jour du message de réponse");
+            
+            // Créer un message de succès personnalisé
+            const successMessage = this.generateSuccessMessage(appointmentResult);
+            
+            // Remplacer le message de la réponse parsée par le message de succès
+            parsedResponse.message = successMessage;
+            
+            // Marquer comme confirmé et créé dans les données extraites
+            parsedResponse.extractedData.finalConfirmed = true;
+            parsedResponse.extractedData.appointmentCreated = true;
+            parsedResponse.extractedData.appointmentId = appointmentResult.id || this.state.appointment.id;
+            
+          } else {
+            // Échec de la création
+            console.log("Échec de la création du rendez-vous");
+            
+            // Message d'erreur mais confirmation du processus
+            const errorMessage = `Votre demande de rendez-vous a été enregistrée pour le ${this.state.appointment.date} à ${this.state.appointment.time} au garage ${this.state.garage.name}. Cependant, il y a eu un problème technique lors de la création. Veuillez contacter le garage directement pour confirmer votre rendez-vous. Référence: ${this.state.service.name} pour votre ${this.vehicleData?.brand || 'véhicule'} ${this.vehicleData?.model || ''} (${this.state.vehicle.licensePlate}).`;
+            
+            parsedResponse.message = errorMessage;
+            parsedResponse.extractedData.finalConfirmed = true;
+            parsedResponse.extractedData.appointmentCreated = false;
+          }
         }
         break;
     }
@@ -841,6 +871,56 @@ Remplacer [GARAGE] par "${garageInfo}"`;
     this.vehicleData = null;
     this.memory.clear();
     this.isProcessing = false;
+  }
+
+  /**
+   * Génère un message de succès personnalisé après création du rendez-vous
+   * @param {Object} appointmentResult - Résultat de la création du rendez-vous
+   * @returns {string} Message de succès formaté
+   */
+  generateSuccessMessage(appointmentResult) {
+    const vehicleInfo = this.vehicleData ? 
+      `${this.vehicleData.brand} ${this.vehicleData.model}` : 
+      'votre véhicule';
+    
+    const serviceInfo = this.state.service.name || 'le service sélectionné';
+    const garageInfo = this.state.garage.name || 'le garage sélectionné';
+    const dateInfo = this.state.appointment.date || 'la date sélectionnée';
+    const timeInfo = this.state.appointment.time || 'l\'heure sélectionnée';
+    const plateInfo = this.state.vehicle.licensePlate || 'votre véhicule';
+    
+    // Formater la date pour l'affichage
+    let formattedDate = dateInfo;
+    if (dateInfo && dateInfo.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      const date = new Date(dateInfo);
+      const options = { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      };
+      formattedDate = date.toLocaleDateString('fr-FR', options);
+    }
+    
+    // Message de succès avec ID de rendez-vous si disponible
+    const appointmentId = appointmentResult.id || this.state.appointment.id;
+    const idInfo = appointmentId ? ` (Référence: ${appointmentId})` : '';
+    
+    const successMessage = `🎉 Parfait ! Votre rendez-vous a été confirmé avec succès !
+
+📋 **Récapitulatif de votre rendez-vous :**
+• **Véhicule :** ${vehicleInfo} (${plateInfo})
+• **Service :** ${serviceInfo}
+• **Garage :** ${garageInfo}
+• **Date :** ${formattedDate}
+• **Heure :** ${timeInfo}${idInfo}
+
+📧 Un email de confirmation vous sera envoyé prochainement avec tous les détails.
+📞 En cas de besoin, vous pouvez contacter directement le garage.
+
+Merci d'avoir utilisé nos services ! À bientôt ! 🚗✨`;
+
+    return successMessage;
   }
 }
 
