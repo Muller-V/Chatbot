@@ -269,6 +269,12 @@ class ApiService {
   /**
    * Crée un rendez-vous
    * @param {Object} appointmentData - Données du rendez-vous
+   * @param {string} appointmentData.licensePlate - Plaque d'immatriculation du véhicule
+   * @param {string} appointmentData.serviceId - ID du service sélectionné
+   * @param {string} appointmentData.garageId - ID du garage sélectionné
+   * @param {string} appointmentData.date - Date au format YYYY-MM-DD
+   * @param {string} appointmentData.time - Heure au format HH:MM
+   * @param {string} [appointmentData.notes] - Notes optionnelles
    * @returns {Promise<Object|null>} Résultat de la création ou null en cas d'erreur
    */
   async createAppointment(appointmentData) {
@@ -277,12 +283,114 @@ class ApiService {
         await this.authenticate();
       }
       
-      const response = await this.apiClient.post('/api/appointments', appointmentData);
+      // Formater les données selon les exigences du backend
+      const formattedData = await this.formatAppointmentData(appointmentData);
+      
+      console.log('Données formatées pour la création du rendez-vous:', formattedData);
+      
+      const response = await this.apiClient.post('/api/appointments', formattedData);
       return response.data;
     } catch (error) {
       console.error('Error creating appointment:', error.message);
+      if (error.response) {
+        console.error('Response data:', error.response.data);
+        console.error('Response status:', error.response.status);
+      }
       return null;
     }
+  }
+
+  /**
+   * Formate les données du rendez-vous selon les exigences du backend
+   * @param {Object} appointmentData - Données brutes du rendez-vous
+   * @returns {Promise<Object>} Données formatées pour l'API
+   */
+  async formatAppointmentData(appointmentData) {
+    const { licensePlate, serviceId, garageId, date, time, notes } = appointmentData;
+    
+    // Formater correctement la date et l'heure
+    let formattedDateTime;
+    
+    if (date && time && this.isValidTimeFormat(time)) {
+      // Si on a une date complète (YYYY-MM-DD) et une heure valide (HH:MM)
+      formattedDateTime = `${date}T${time}:00`;
+    } else if (date && this.isValidDateFormat(date)) {
+      // Si on a seulement une date valide, ajouter une heure par défaut
+      formattedDateTime = `${date}T09:00:00`;
+    } else {
+      // Date par défaut (demain à 9h)
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const formattedDate = tomorrow.toISOString().split('T')[0];
+      formattedDateTime = `${formattedDate}T09:00:00`;
+    }
+    
+    console.log(`Formatage datetime: date="${date}", time="${time}" → "${formattedDateTime}"`);
+    
+    // Récupérer l'ID du véhicule si on a seulement la plaque
+    let vehicleId = null;
+    if (licensePlate) {
+      try {
+        const vehicleData = await this.getVehicleByPlate(licensePlate);
+        if (vehicleData && vehicleData.id) {
+          vehicleId = vehicleData.id;
+        } else {
+          // Si le véhicule n'existe pas, utiliser la plaque comme ID temporaire
+          vehicleId = licensePlate;
+        }
+      } catch (error) {
+        console.warn('Impossible de récupérer l\'ID du véhicule, utilisation de la plaque:', licensePlate);
+        vehicleId = licensePlate;
+      }
+    }
+    
+    // Préparer les opérations (services) sous forme de tableau
+    const operations = serviceId ? [serviceId] : [];
+    
+    // Générer des notes automatiques si non fournies
+    const autoNotes = notes || `Rendez-vous automatique - Service: ${serviceId || 'Non spécifié'} - Véhicule: ${licensePlate || 'Non spécifié'}`;
+    
+    // Formater selon les exigences du formulaire backend
+    const formattedData = {
+      date: formattedDateTime,
+      status: 'scheduled', // Status par défaut selon les choix disponibles
+      notes: autoNotes,
+      vehicule_id: vehicleId,
+      garage_id: garageId,
+      operations: operations
+    };
+    
+    return formattedData;
+  }
+
+  /**
+   * Vérifie si le format de l'heure est valide (HH:MM)
+   * @param {string} time - Heure à vérifier
+   * @returns {boolean} True si le format est valide
+   */
+  isValidTimeFormat(time) {
+    if (!time || typeof time !== 'string') return false;
+    
+    // Vérifier le format HH:MM
+    const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+    return timeRegex.test(time);
+  }
+
+  /**
+   * Vérifie si le format de la date est valide (YYYY-MM-DD)
+   * @param {string} date - Date à vérifier
+   * @returns {boolean} True si le format est valide
+   */
+  isValidDateFormat(date) {
+    if (!date || typeof date !== 'string') return false;
+    
+    // Vérifier le format YYYY-MM-DD
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(date)) return false;
+    
+    // Vérifier que la date est valide
+    const parsedDate = new Date(date);
+    return parsedDate instanceof Date && !isNaN(parsedDate);
   }
 
   /**

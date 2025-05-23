@@ -47,7 +47,7 @@ class UIController {
     updateStepIndicator(step) {
         // Valider l'entrée
         const numStep = parseInt(step);
-        if (isNaN(numStep) || numStep < 1 || numStep > 5 || numStep === this.currentStep) return;
+        if (isNaN(numStep) || numStep < 1 || numStep > 9 || numStep === this.currentStep) return;
         
         // Mettre à jour les classes d'étape avec animation
         document.querySelectorAll('.step').forEach((el, index) => {
@@ -68,9 +68,9 @@ class UIController {
             }
         });
         
-        // Mettre à jour la barre de progression avec animation
+        // Mettre à jour la barre de progression avec animation (9 étapes au lieu de 5)
         const progressEl = document.querySelector('.step-progress');
-        const progressWidth = ((numStep - 1) / 4) * 100;
+        const progressWidth = ((numStep - 1) / 8) * 100; // 8 intervalles pour 9 étapes
         progressEl.style.width = progressWidth + '%';
         
         // Mettre à jour l'étape courante
@@ -79,11 +79,15 @@ class UIController {
         // Ajouter un message d'action système pour le changement d'étape
         if (numStep > 1) {
             const stepNames = [
-                "Identification du véhicule", 
-                "Sélection du service",
+                "Accueil", 
+                "Plaque d'immatriculation",
+                "Validation véhicule",
+                "Choix du service",
+                "Validation service",
                 "Choix du garage",
+                "Validation garage",
                 "Sélection du créneau",
-                "Confirmation de la réservation"
+                "Confirmation finale"
             ];
             
             this.addSystemActionMessage(`Étape ${numStep}: ${stepNames[numStep-1]}`);

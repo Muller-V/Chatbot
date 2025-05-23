@@ -1,6 +1,7 @@
 /**
- * Classe représentant l'état de la conversation
+ * Modèle d'état de conversation simplifié pour le nouveau système 9 étapes
  */
+
 const { CONVERSATION_STEPS } = require('../config/constants');
 
 class ConversationState {
@@ -8,12 +9,11 @@ class ConversationState {
     this.reset();
   }
 
-  /**
-   * Réinitialise l'état de la conversation
-   */
   reset() {
-    this.currentStep = CONVERSATION_STEPS.VEHICLE_IDENTIFICATION;
+    // Étape actuelle de la conversation (commence par WELCOME)
+    this.currentStep = CONVERSATION_STEPS.WELCOME;
     
+    // Informations du véhicule
     this.vehicle = {
       licensePlate: null,
       brand: null,
@@ -21,114 +21,85 @@ class ConversationState {
       id: null,
       confirmed: false
     };
-    
+
+    // Service sélectionné
     this.service = {
       id: null,
       name: null,
       price: null,
       confirmed: false
     };
-    
+
+    // Garage sélectionné
     this.garage = {
       id: null,
       name: null,
       address: null,
       confirmed: false
     };
-    
+
+    // Rendez-vous planifié
     this.appointment = {
       date: null,
       time: null,
-      confirmed: false
+      finalConfirmed: false,
+      created: false,
+      id: null
     };
-    
-    this.finalConfirmation = false;
-    this.userSentiment = 'neutral';
-    this.turnCount = 0;
-    this.availableServices = [];
-    this.availableGarages = [];
+
+    // Contexte de conversation
+    this.context = {
+      problemType: null,       // "batterie", "pneus", etc.
+      userPreferences: {},     // Préférences utilisateur
+      lastAction: null         // Dernière action effectuée
+    };
   }
 
   /**
-   * Passe à l'étape suivante
+   * Vérifie si l'état est prêt pour une progression d'étape
    */
-  advanceStep() {
-    if (this.currentStep < CONVERSATION_STEPS.COMPLETED) {
-      this.currentStep++;
-      return true;
+  canAdvanceToStep(targetStep) {
+    switch (targetStep) {
+      case CONVERSATION_STEPS.REQUEST_PLATE:
+        return this.currentStep === CONVERSATION_STEPS.WELCOME;
+        
+      case CONVERSATION_STEPS.VALIDATE_VEHICLE:
+        return this.vehicle.licensePlate !== null;
+        
+      case CONVERSATION_STEPS.CHOOSE_SERVICE:
+        return this.vehicle.confirmed;
+        
+      case CONVERSATION_STEPS.VALIDATE_SERVICE:
+        return this.service.id !== null;
+        
+      case CONVERSATION_STEPS.CHOOSE_GARAGE:
+        return this.service.confirmed;
+        
+      case CONVERSATION_STEPS.VALIDATE_GARAGE:
+        return this.garage.id !== null;
+        
+      case CONVERSATION_STEPS.CHOOSE_SLOT:
+        return this.garage.confirmed;
+        
+      case CONVERSATION_STEPS.FINAL_VALIDATION:
+        return this.appointment.date !== null && this.appointment.time !== null;
+        
+      default:
+        return false;
     }
-    return false;
   }
 
   /**
-   * Vérifie si toutes les informations nécessaires sont disponibles pour la confirmation
+   * Retourne un résumé de l'état actuel
    */
-  isReadyForConfirmation() {
-    return (
-      this.vehicle.confirmed &&
-      this.service.confirmed &&
-      this.garage.confirmed &&
-      this.appointment.confirmed
-    );
-  }
-
-  goToStep(step) {
-    if (Object.values(CONVERSATION_STEPS).includes(step)) {
-      this.currentStep = step;
-      
-      if (step === CONVERSATION_STEPS.VEHICLE_IDENTIFICATION || 
-          this.currentStep === CONVERSATION_STEPS.VEHICLE_IDENTIFICATION) {
-        this.vehicle.confirmed = false;
-      }
-      
-      if (step === CONVERSATION_STEPS.SERVICE_SELECTION || 
-          this.currentStep === CONVERSATION_STEPS.SERVICE_SELECTION ||
-          !this.vehicle.confirmed) {
-        this.service.confirmed = false;
-      }
-      
-      if (step === CONVERSATION_STEPS.GARAGE_SELECTION || 
-          this.currentStep === CONVERSATION_STEPS.GARAGE_SELECTION ||
-          !this.service.confirmed) {
-        this.garage.confirmed = false;
-      }
-      
-      if (step === CONVERSATION_STEPS.TIME_SLOT_SELECTION || 
-          this.currentStep === CONVERSATION_STEPS.TIME_SLOT_SELECTION ||
-          !this.garage.confirmed) {
-        this.appointment.confirmed = false;
-      }
-      
-      this.finalConfirmation = false;
-      return true;
-    }
-    return false;
-  }
-
-  generateSummary() {
-    let summary = "Récapitulatif de votre rendez-vous :\n";
-    
-    if (this.vehicle.brand && this.vehicle.model) {
-      summary += `- Véhicule : ${this.vehicle.brand} ${this.vehicle.model} (${this.vehicle.licensePlate})\n`;
-    } else if (this.vehicle.licensePlate) {
-      summary += `- Véhicule : ${this.vehicle.licensePlate}\n`;
-    }
-    
-    if (this.service.name) {
-      const priceText = this.service.price ? ` (${this.service.price})` : '';
-      summary += `- Service : ${this.service.name}${priceText}\n`;
-    }
-    
-    if (this.garage.name) {
-      summary += `- Garage : ${this.garage.name}${this.garage.address ? ` (${this.garage.address})` : ''}\n`;
-    }
-    
-    if (this.appointment.date) {
-      const timeText = this.appointment.time ? ` à ${this.appointment.time}` : '';
-      summary += `- Date : ${this.appointment.date}${timeText}\n`;
-    }
-    
-    return summary;
+  getSummary() {
+    return {
+      step: this.currentStep,
+      vehicle: this.vehicle.confirmed ? `${this.vehicle.brand} ${this.vehicle.model} (${this.vehicle.licensePlate})` : 'Non confirmé',
+      service: this.service.confirmed ? `${this.service.name} (${this.service.price}€)` : 'Non confirmé',
+      garage: this.garage.confirmed ? this.garage.name : 'Non confirmé',
+      appointment: this.appointment.confirmed ? `${this.appointment.date} à ${this.appointment.time}` : 'Non confirmé'
+    };
   }
 }
 
