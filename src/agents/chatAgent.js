@@ -321,10 +321,21 @@ class ChatAgent {
     const extractedData = parsedResponse.extractedData;
     const messageLower = userMessage.toLowerCase();
     
-    // Mettre à jour l'étape actuelle seulement si elle progresse logiquement
-    if (parsedResponse.currentStep && parsedResponse.currentStep > this.state.currentStep) {
-      console.log(`Progression d'étape: ${this.state.currentStep} → ${parsedResponse.currentStep}`);
-      this.state.currentStep = parsedResponse.currentStep;
+    // Gérer les retours en arrière et progressions d'étapes
+    if (parsedResponse.currentStep) {
+      // Autoriser les retours en arrière lors des refus
+      if (parsedResponse.currentStep < this.state.currentStep) {
+        console.log(`Retour en arrière: ${this.state.currentStep} → ${parsedResponse.currentStep}`);
+        this.state.currentStep = parsedResponse.currentStep;
+        
+        // Réinitialiser les données concernées lors du retour en arrière
+        this.resetStateFromStep(parsedResponse.currentStep);
+      }
+      // Autoriser la progression normale
+      else if (parsedResponse.currentStep > this.state.currentStep) {
+        console.log(`Progression d'étape: ${this.state.currentStep} → ${parsedResponse.currentStep}`);
+        this.state.currentStep = parsedResponse.currentStep;
+      }
     }
 
     // Synchroniser les données du véhicule
@@ -390,11 +401,17 @@ class ChatAgent {
         break;
           
       case CONVERSATION_STEPS.VALIDATE_VEHICLE:
-        // Étape 3: Si confirmation véhicule, passer au choix service
+        // Étape 3: Gérer confirmation ou refus du véhicule
         if (this.isConfirmation(messageLower) || extractedData.vehicleValidated) {
           this.state.vehicle.confirmed = true;
           this.state.currentStep = CONVERSATION_STEPS.CHOOSE_SERVICE;
           console.log("Progression automatique vers étape 4 (choix service)");
+        } else if (this.isRefusal(messageLower)) {
+          // Retour à la demande de plaque si refus
+          this.state.currentStep = CONVERSATION_STEPS.REQUEST_PLATE;
+          this.vehicleData = null; // Réinitialiser les données véhicule
+          this.state.vehicle = { licensePlate: null, confirmed: false };
+          console.log("Retour à l'étape 2 (demande plaque) suite au refus");
         }
         break;
           
@@ -414,12 +431,17 @@ class ChatAgent {
         break;
         
       case CONVERSATION_STEPS.VALIDATE_SERVICE:
-        // Étape 5: Si confirmation service, passer au choix garage
+        // Étape 5: Gérer confirmation ou refus du service
         if (this.isConfirmation(messageLower) || extractedData.serviceValidated) {
           this.state.service.confirmed = true;
           console.log("Service confirmé par l'utilisateur");
           this.state.currentStep = CONVERSATION_STEPS.CHOOSE_GARAGE;
           console.log("Progression automatique vers étape 6 (choix garage)");
+        } else if (this.isRefusal(messageLower)) {
+          // Retour au choix du service si refus
+          this.state.currentStep = CONVERSATION_STEPS.CHOOSE_SERVICE;
+          this.state.service = { id: null, name: null, confirmed: false };
+          console.log("Retour à l'étape 4 (choix service) suite au refus");
         }
         break;
           
@@ -440,12 +462,17 @@ class ChatAgent {
         break;
         
       case CONVERSATION_STEPS.VALIDATE_GARAGE:
-        // Étape 7: Si confirmation garage, passer au choix créneau
+        // Étape 7: Gérer confirmation ou refus du garage
         if (this.isConfirmation(messageLower) || extractedData.garageValidated) {
           this.state.garage.confirmed = true;
           console.log("Garage confirmé par l'utilisateur");
           this.state.currentStep = CONVERSATION_STEPS.CHOOSE_SLOT;
           console.log("Progression automatique vers étape 8 (choix créneau)");
+        } else if (this.isRefusal(messageLower)) {
+          // Retour au choix du garage si refus
+          this.state.currentStep = CONVERSATION_STEPS.CHOOSE_GARAGE;
+          this.state.garage = { id: null, name: null, confirmed: false };
+          console.log("Retour à l'étape 6 (choix garage) suite au refus");
         }
         break;
           
@@ -465,7 +492,7 @@ class ChatAgent {
         break;
         
       case CONVERSATION_STEPS.FINAL_VALIDATION:
-        // Étape 9: Si confirmation finale, terminer
+        // Étape 9: Gérer confirmation finale ou refus
         if (this.isConfirmation(messageLower) || extractedData.finalConfirmed) {
           this.state.appointment.finalConfirmed = true;
           console.log("Rendez-vous confirmé");
@@ -500,17 +527,53 @@ class ChatAgent {
             parsedResponse.extractedData.finalConfirmed = true;
             parsedResponse.extractedData.appointmentCreated = false;
           }
+        } else if (this.isRefusal(messageLower)) {
+          // Retour au choix du créneau si refus
+          this.state.currentStep = CONVERSATION_STEPS.CHOOSE_SLOT;
+          this.state.appointment = { date: null, time: null, finalConfirmed: false, created: false, id: null };
+          console.log("Retour à l'étape 8 (choix créneau) suite au refus");
         }
         break;
     }
   }
 
   /**
+   * Réinitialise les données d'état selon l'étape de retour
+   * @param {number} step - Étape vers laquelle on retourne
+   */
+  resetStateFromStep(step) {
+    switch (step) {
+      case CONVERSATION_STEPS.REQUEST_PLATE:
+        this.vehicleData = null;
+        this.state.vehicle = { licensePlate: null, confirmed: false };
+        // Pas de break intentionnel pour cascader
+      case CONVERSATION_STEPS.CHOOSE_SERVICE:
+        this.state.service = { id: null, name: null, confirmed: false };
+        // Pas de break intentionnel pour cascader
+      case CONVERSATION_STEPS.CHOOSE_GARAGE:
+        this.state.garage = { id: null, name: null, confirmed: false };
+        // Pas de break intentionnel pour cascader
+      case CONVERSATION_STEPS.CHOOSE_SLOT:
+        this.state.appointment = { date: null, time: null, finalConfirmed: false, created: false, id: null };
+        break;
+    }
+    console.log(`État réinitialisé pour l'étape ${step}`);
+  }
+
+  /**
    * Détecte si le message est une confirmation
    */
   isConfirmation(message) {
-    const confirmations = ['oui', 'yes', 'correct', 'exact', 'parfait', 'ok', 'd\'accord', 'confirme', 'c\'est ça'];
+    const confirmations = ['oui', 'yes', 'correct', 'exact', 'parfait', 'ok', 'd\'accord', 'confirme', 'c\'est ça', 'tout à fait'];
     return confirmations.some(word => message.includes(word));
+  }
+
+  /**
+   * Détecte si le message est un refus
+   */
+  isRefusal(message) {
+    const refusals = ['non', 'no', 'pas le bon', 'incorrect', 'pas celui-là', 'autre', 'différent', 'changer', 'annuler', 'pas ça'];
+    return refusals.some(word => message.includes(word));
   }
 
   /**
