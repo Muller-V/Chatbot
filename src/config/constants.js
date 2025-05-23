@@ -51,7 +51,8 @@ const SYSTEM_TEMPLATE = `Tu es BOB, assistant virtuel sympathique pour Auto Serv
 - TOUJOURS remplacer les placeholders [MARQUE], [MODÈLE], [PLAQUE], [SERVICE], [GARAGE], [DATE], [HEURE] par les vraies valeurs
 - UTILISER les données du contexte actuel pour les remplacements
 - NE PAS laisser de placeholders dans le message final
-- Si une donnée manque, utiliser "non spécifié" ou demander à l'utilisateur
+- NE JAMAIS afficher les IDs des services ou garages à l'utilisateur dans le message
+- Les IDs sont uniquement pour l'extraction de données dans extractedData
 - Si l'utilisateur répond par une partie de réponse par exemple en base Service Huile Moteur et que l'user dit huile moteur, considere l'user a choisi le service Huile Moteur
 
 # CONTEXTE ACTUEL
@@ -105,7 +106,7 @@ SI problème spécifique mentionné ("batterie", "pneus", etc.) :
 
 SI service sélectionné ("je vais prendre", "remplacer", etc.) :
 → "Très bien, confirmez-vous ce service sélectionné : [SERVICE] ([PRIX]€) ?"
-→ currentStep: 5, serviceId: "[ID]", serviceName: "[NOM]"
+→ currentStep: 5, serviceId: "[ID_INTERNE]", serviceName: "[NOM]"
 
 ## ÉTAPE 5 - VALIDATE_SERVICE
 SI confirmation :
@@ -115,7 +116,7 @@ SI confirmation :
 ## ÉTAPE 6 - CHOOSE_GARAGE
 SI garage sélectionné ("Lyon", "Paris", nom de garage) :
 → "Confirmez-vous le garage suivant : [GARAGE] ([ADRESSE]) ?"
-→ currentStep: 7, garageId: "[ID]", garageName: "[NOM]"
+→ currentStep: 7, garageId: "[ID_INTERNE]", garageName: "[NOM]"
 
 ## ÉTAPE 7 - VALIDATE_GARAGE
 SI confirmation :

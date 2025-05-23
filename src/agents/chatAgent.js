@@ -622,6 +622,23 @@ class ChatAgent {
       }
     }
     
+    // Valider le créneau par rapport aux disponibilités de l'API
+    if (this.state.appointment.date && this.state.appointment.time && this.availableSlots.length > 0) {
+      const isValidSlot = this.validateSlotAvailability(this.state.appointment.date, this.state.appointment.time);
+      if (isValidSlot) {
+        console.log(`Créneau validé: ${this.state.appointment.date} à ${this.state.appointment.time}`);
+      } else {
+        console.warn(`Créneau non disponible: ${this.state.appointment.date} à ${this.state.appointment.time}`);
+        // Proposer un créneau alternatif proche
+        const alternativeSlot = this.findNearestAvailableSlot(this.state.appointment.date, this.state.appointment.time);
+        if (alternativeSlot) {
+          this.state.appointment.date = alternativeSlot.date;
+          this.state.appointment.time = alternativeSlot.time;
+          console.log(`Créneau alternatif proposé: ${alternativeSlot.date} à ${alternativeSlot.time}`);
+        }
+      }
+    }
+    
     // Si on a réussi à détecter les deux, confirmer
     if (this.state.appointment.date && this.state.appointment.time) {
       console.log(`Créneau complet détecté: ${this.state.appointment.date} à ${this.state.appointment.time}`);
@@ -639,6 +656,66 @@ class ChatAgent {
         console.log(`Heure par défaut: ${this.state.appointment.time}`);
       }
     }
+  }
+
+  /**
+   * Valide si un créneau est disponible dans la liste des créneaux de l'API
+   * @param {string} date - Date au format YYYY-MM-DD
+   * @param {string} time - Heure au format HH:MM
+   * @returns {boolean} True si le créneau est disponible
+   */
+  validateSlotAvailability(date, time) {
+    if (!this.availableSlots || this.availableSlots.length === 0) {
+      return false;
+    }
+    
+    // Chercher la date dans les disponibilités
+    const dayAvailability = this.availableSlots.find(slot => slot.date === date);
+    if (!dayAvailability) {
+      return false;
+    }
+    
+    // Vérifier si l'heure est dans les créneaux disponibles
+    if (Array.isArray(dayAvailability.slots)) {
+      return dayAvailability.slots.includes(time);
+    }
+    
+    return false;
+  }
+
+  /**
+   * Trouve le créneau disponible le plus proche d'une date/heure donnée
+   * @param {string} targetDate - Date cible au format YYYY-MM-DD
+   * @param {string} targetTime - Heure cible au format HH:MM
+   * @returns {Object|null} Objet {date, time} du créneau le plus proche ou null
+   */
+  findNearestAvailableSlot(targetDate, targetTime) {
+    if (!this.availableSlots || this.availableSlots.length === 0) {
+      return null;
+    }
+    
+    let nearestSlot = null;
+    let nearestDiff = Infinity;
+    const targetDateTime = new Date(`${targetDate}T${targetTime}:00`);
+    
+    this.availableSlots.forEach(daySlot => {
+      if (Array.isArray(daySlot.slots)) {
+        daySlot.slots.forEach(timeSlot => {
+          const slotDateTime = new Date(`${daySlot.date}T${timeSlot}:00`);
+          const diff = Math.abs(slotDateTime.getTime() - targetDateTime.getTime());
+          
+          if (diff < nearestDiff) {
+            nearestDiff = diff;
+            nearestSlot = {
+              date: daySlot.date,
+              time: timeSlot
+            };
+          }
+        });
+      }
+    });
+    
+    return nearestSlot;
   }
 
   /**
@@ -711,16 +788,14 @@ class ChatAgent {
       servicesToShow = this.filterServicesByProblem(message);
     }
 
-    const servicesStr = servicesToShow.length > 0 ?
-      servicesToShow.slice(0, 5).map(s => `${s.name} (${s.price}€) - ID: ${s.id}`).join(" | ") :
-      "Aucun service disponible";
+    const servicesStr = this.formatServicesForLLM(servicesToShow);
 
     const garagesStr = this.allGarages.length > 0 ?
       this.allGarages.slice(0, 5).map(g => `${g.name} (${g.address || 'adresse non disponible'}) - ID: ${g.id}`).join(" | ") :
       "Aucun garage disponible";
 
     const slotsStr = this.availableSlots.length > 0 ?
-      this.availableSlots.slice(0, 5).map(s => `${s.date} à ${s.time || 'horaire à définir'}`).join(" | ") :
+      this.availableSlots.slice(0, 5).map(s => `${s.date} à ${Array.isArray(s.slots) ? s.slots.join(', ') : 'horaire à définir'}`).join(" | ") :
       "Aucun créneau disponible";
 
     // Récupérer l'historique de conversation
@@ -921,6 +996,32 @@ Remplacer [GARAGE] par "${garageInfo}"`;
 Merci d'avoir utilisé nos services ! À bientôt ! 🚗✨`;
 
     return successMessage;
+  }
+
+  /**
+   * Formate les services pour l'affichage utilisateur (sans IDs)
+   * @param {Array} services - Liste des services
+   * @returns {string} Services formatés pour l'utilisateur
+   */
+  formatServicesForUser(services) {
+    if (!services || services.length === 0) {
+      return "Aucun service disponible";
+    }
+    
+    return services.slice(0, 5).map(s => `${s.name} (${s.price}€)`).join(", ");
+  }
+
+  /**
+   * Formate les services pour le LLM (avec IDs)
+   * @param {Array} services - Liste des services
+   * @returns {string} Services formatés pour le LLM
+   */
+  formatServicesForLLM(services) {
+    if (!services || services.length === 0) {
+      return "Aucun service disponible";
+    }
+    
+    return services.slice(0, 5).map(s => `${s.name} (${s.price}€) - ID: ${s.id}`).join(" | ");
   }
 }
 
